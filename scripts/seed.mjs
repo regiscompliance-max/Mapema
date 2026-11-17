@@ -125,7 +125,6 @@ export async function seedDemoWorld(base) {
   await a.post(`/dev/esign/${conf.envelopeId}/complete`);
   await a.post('/dev/jobs/run');
   console.log('invoice DEMO-INV-0001 KES 1,000,000 due in 48 days: eligible (the supplier can now get paid early)');
-  console.log('note: the supplier bank account has a 24h cooling-off before the first release (BANK_ACCOUNT_COOLING_OFF_HOURS).');
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
