@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import {
+  nplDaysFor,
   allocate,
   actualInterest,
   assertKes,
@@ -180,5 +181,18 @@ describe('TC-PROP properties (fast-check)', () => {
         }),
       { numRuns: 2000 },
     );
+  });
+});
+
+describe('in duplum and NPL classification (C-07)', () => {
+  it('refuses a quote whose interest + fees exceed the amount advanced', () => {
+    expect(() => quote(5_000_000n, 30, { ...STANDARD_PRICING, advanceRateBps: 100 })).toThrow(/exceed the amount advanced/);
+    expect(quote(100_000_000n, 120).totalCostCents < quote(100_000_000n, 120).advanceCents).toBe(true);
+  });
+  it('NPL after 30 days for loans up to 30 days, else 90', () => {
+    expect(nplDaysFor(1)).toBe(30);
+    expect(nplDaysFor(30)).toBe(30);
+    expect(nplDaysFor(31)).toBe(90);
+    expect(nplDaysFor(120)).toBe(90);
   });
 });

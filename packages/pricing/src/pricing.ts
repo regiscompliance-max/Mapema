@@ -76,6 +76,9 @@ export function quote(invoiceCents: Cents, days: number, p: PricingParams = STAN
   const mapemaKeepsCents = advanceCents + totalCostCents;
   const supplierBalanceCents = invoiceCents - mapemaKeepsCents;
   if (supplierBalanceCents < 0n) throw new PricingError('NEGATIVE_SUPPLIER_BALANCE', 'fees exceed the invoice remainder');
+  // In duplum at origination: the total cost of credit may never exceed the principal, so with no
+  // late charges (D-09) recoveries can never pass the NPL cap (C-07; counsel to confirm the cap wording).
+  if (totalCostCents > advanceCents) throw new PricingError('IN_DUPLUM', 'interest and fees would exceed the amount advanced');
   const aprBps = Number(divHalfUp(totalCostCents * 365n * 10000n, advanceCents * BigInt(days)));
   return {
     invoiceCents,
@@ -179,4 +182,13 @@ export function settlementFor(args: {
 export function inDuplumHeadroom(principalAtNplCents: Cents, chargesAndInterestSinceNplCents: Cents): Cents {
   const h = principalAtNplCents - chargesAndInterestSinceNplCents;
   return h > 0n ? h : 0n;
+}
+
+/**
+ * Days past due after which an advance is non-performing (C-07, per law-firm commentary on the
+ * NDTCP Regulations 2026: 30 days for loans of up to 30 days, otherwise 90 days, unless the
+ * agreement sets a default period). Counsel to confirm against the gazetted text.
+ */
+export function nplDaysFor(termDays: number): number {
+  return termDays <= 30 ? 30 : 90;
 }

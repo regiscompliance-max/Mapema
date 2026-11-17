@@ -6,7 +6,7 @@
 import { Body, Controller, Get, Inject, Injectable, OnModuleInit, Param, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
 import type { Adapters } from '@mapema/adapters';
-import { daysBetween, formatKes } from '@mapema/pricing';
+import { daysBetween, formatKes, nplDaysFor } from '@mapema/pricing';
 import { Audit, SYSTEM } from '../common/audit';
 import { ADAPTERS } from '../common/config';
 import { Clock } from '../common/clock';
@@ -17,7 +17,6 @@ import { Notifier } from '../common/notify';
 import { assertOrgAccess, AuthUser, BUYER_ROLES, CurrentUser, isStaff, orgIds, Public, Roles, STAFF_ROLES, StepUp, SUPPLIER_ROLES } from '../auth/auth';
 import { ApprovalsService } from './approvals';
 
-export const NPL_DAYS = 90; // CBK prudential classification; counsel to confirm for NDTCPs
 export const DSR_DAYS = 7; // DP (General) Regs 2021 access-request clock; counsel to confirm (Q-16)
 
 @Injectable()
@@ -45,7 +44,7 @@ export class OpsService implements OnModuleInit {
   // ------------------------------------------------------------------ late ladder (OPS-08)
   async runLateLadder(today = this.clock.today()) {
     const rows = await this.db.query(
-      `SELECT a.id, a.status, a.buyer_id, a.supplier_id, a.due_date, i.invoice_number, i.amount_cents, ca.virtual_account_no,
+      `SELECT a.id, a.status, a.term_days, a.buyer_id, a.supplier_id, a.due_date, i.invoice_number, i.amount_cents, ca.virtual_account_no,
               (SELECT array_agg(stage) FROM collection_action x WHERE x.advance_id = a.id) AS done
        FROM advance a JOIN invoice i ON i.id = a.invoice_id LEFT JOIN collection_account ca ON ca.buyer_id = a.buyer_id
        WHERE a.status IN ('funded','late','recourse') AND a.due_date < $1`, [today]);
@@ -69,7 +68,7 @@ export class OpsService implements OnModuleInit {
         if (late >= 7) await step('d7_call', 'system', 'task: ops to call buyer AP');
         if (late >= 14) await step('d14_demand', 'system', 'task: ops to issue demand letter (template needs counsel sign-off)');
         if (late >= 30) await step('d30_recourse', 'system', 'task: credit to decide recourse to supplier');
-        if (late >= NPL_DAYS && r.status !== 'non_performing') {
+        if (late >= nplDaysFor(r.term_days ?? 120) && r.status !== 'non_performing') {
           await c.query(`UPDATE advance SET status = 'non_performing', updated_at = now() WHERE id = $1`, [r.id]);
           await step('npl', 'system', 'classified non-performing; in duplum cap applies; no further charges accrue');
         }

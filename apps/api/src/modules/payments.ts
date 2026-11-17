@@ -9,10 +9,11 @@
  * loan is HELD and posted on the due date, because Fineract would otherwise apply an early partial
  * remainder to accrued interest before the not-yet-due fee (found in the Phase 1 spike).
  */
+import { PoolClient } from 'pg';
 import { Body, Controller, Get, Inject, Injectable, OnModuleInit, Param, Post, Query, Req } from '@nestjs/common';
 import { z } from 'zod';
 import type { Adapters, BankCredit } from '@mapema/adapters';
-import { allocate, assertKes, Cents, formatKes } from '@mapema/pricing';
+import { allocate, assertKes, Cents, formatKes, inDuplumHeadroom } from '@mapema/pricing';
 import { Audit, SYSTEM } from '../common/audit';
 import { ADAPTERS } from '../common/config';
 import { Clock } from '../common/clock';
@@ -151,6 +152,7 @@ export class PaymentsService implements OnModuleInit {
         await c.query(`INSERT INTO reconciliation_break (run_id, kind, difference_cents, reference) VALUES ($1,'allocation_mismatch',$2,$3)`,
           [run, (expected.interestCents - rep.interestCents).toString(), JSON.stringify({ paymentId, expected, ledger: rep }, (_k, v) => (typeof v === 'bigint' ? v.toString() : v))]);
       }
+      await this.inDuplumGuard(c, a.id, toCents(a.principal_cents), paymentId);
       if (closed) {
         await c.query(`UPDATE advance SET status = 'settled', updated_at = now() WHERE id = $1`, [a.id]);
         await c.query(`UPDATE invoice SET status = 'settled', updated_at = now() WHERE id = $1`, [a.invoice_id]);
@@ -172,8 +174,19 @@ export class PaymentsService implements OnModuleInit {
   }
 
   /** Post held remainders on/after the due date (worker job). */
+  /** In duplum guard (C-07): interest + fees ever collected on an advance may not exceed its principal; a breach is a reconciliation break. */
+  private async inDuplumGuard(c: PoolClient, advanceId: string, principal: Cents, paymentId: string) {
+    const chg = await c.query(`SELECT COALESCE(SUM(fees_charges_cents + interest_cents),0)::bigint AS charges FROM payment_allocation WHERE advance_id = $1`, [advanceId]);
+    const charges = toCents(chg.rows[0].charges);
+    if (charges > principal && inDuplumHeadroom(principal, charges) === 0n) {
+      const run = await this.reconRunFor(c, this.clock.today());
+      await c.query(`INSERT INTO reconciliation_break (run_id, kind, difference_cents, reference) VALUES ($1,'in_duplum_breach',$2,$3)`,
+        [run, (charges - principal).toString(), JSON.stringify({ paymentId, advanceId })]);
+    }
+  }
+
   async postHeld(today = this.clock.today()) {
-    const rows = await this.db.query(`SELECT p.id, p.held_cents, a.id AS advance_id, a.fineract_loan_id, a.due_date FROM payment p JOIN advance a ON a.id = p.advance_id WHERE p.held_cents > 0 AND a.due_date <= $1`, [today]);
+    const rows = await this.db.query(`SELECT p.id, p.held_cents, a.id AS advance_id, a.principal_cents, a.fineract_loan_id, a.due_date FROM payment p JOIN advance a ON a.id = p.advance_id WHERE p.held_cents > 0 AND a.due_date <= $1`, [today]);
     for (const r of rows) {
       const ctx = { requestId: `held-${r.id}` };
       const rep = await this.adapters.ledger.repay(ctx, Number(r.fineract_loan_id), toCents(r.held_cents), r.due_date, `held-${r.id}`);
@@ -182,6 +195,7 @@ export class PaymentsService implements OnModuleInit {
       await this.db.tx(async (c) => {
         await c.query(`UPDATE payment_allocation SET principal_cents = principal_cents + $3, fees_charges_cents = fees_charges_cents + $4, interest_cents = interest_cents + $5 WHERE payment_id = $1 AND advance_id = $2`,
           [r.id, r.advance_id, rep.principalCents, rep.feesCents + rep.penaltiesCents, rep.interestCents]);
+        await this.inDuplumGuard(c, r.advance_id, toCents(r.principal_cents), r.id);
         await c.query(`UPDATE payment SET held_cents = 0, status = 'applied' WHERE id = $1`, [r.id]);
         await c.query(`UPDATE advance SET mirror_principal_outstanding_cents = $2, mirror_fees_outstanding_cents = $3, mirror_interest_outstanding_cents = $4, mirror_refreshed_at = now() WHERE id = $1`,
           [r.advance_id, after.principalOutstandingCents, after.feesOutstandingCents, after.interestOutstandingCents]);
