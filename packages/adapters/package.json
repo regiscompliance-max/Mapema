@@ -1,0 +1,20 @@
+{
+  "name": "@mapema/adapters",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Provider adapters (bank, ledger/Fineract, eTIMS, CRB, KYC, e-signature, SMS, email, storage) with mock and sandbox/live modes",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --exclude test/fineract.live.test.ts",
+    "test:fineract": "vitest run test/fineract.live.test.ts"
+  },
+  "dependencies": {
+    "@mapema/pricing": "0.1.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.0"
+  }
+}
