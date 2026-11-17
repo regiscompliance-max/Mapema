@@ -73,14 +73,15 @@ export class OnboardingService implements OnModuleInit {
     });
     this.outbox.on('invitation.send', async (p, row) => {
       const inv = await this.db.one(`SELECT i.*, b.legal_name AS buyer_name FROM invitation i LEFT JOIN organisation b ON b.id = i.buyer_id WHERE i.id = $1`, [p.invitationId]);
-      if (!inv || inv.accepted_at || inv.revoked_at || !p.link) return;
-      const text = inv.kind === 'supplier' ? render('invite.supplier', { buyer: inv.buyer_name ?? 'Your buyer', link: p.link }) : render('invite.user', { link: p.link });
+      const link = p.linkEnc ? this.crypto.decrypt(Buffer.from(p.linkEnc, 'base64')) : null;
+      if (!inv || inv.accepted_at || inv.revoked_at || !link) return;
+      const text = inv.kind === 'supplier' ? render('invite.supplier', { buyer: inv.buyer_name ?? 'Your buyer', link }) : render('invite.user', { link });
       const ctx = { requestId: `invite-${inv.id}` };
       if (inv.email) await this.adapters.email.send(ctx, { to: inv.email, subject: 'Your Mapema invitation', text, reference: inv.id });
       const phone = this.crypto.decrypt(inv.phone_enc);
       if (phone) await this.adapters.sms.send(ctx, { to: phone, text, reference: inv.id });
       // the link carries the raw token: scrub it from the outbox once delivered
-      await this.db.query(`UPDATE outbox SET payload = payload - 'link' WHERE id = $1`, [row.id]);
+      await this.db.query(`UPDATE outbox SET payload = payload - 'linkEnc' WHERE id = $1`, [row.id]);
     });
     this.outbox.on('buyer.open_collection_account', async (p) => {
       const exists = await this.db.one(`SELECT id FROM collection_account WHERE buyer_id = $1`, [p.buyerId]);
@@ -250,7 +251,8 @@ export class OnboardingService implements OnModuleInit {
       await c.query(`UPDATE invitation SET role_to_grant = $2, access_expires_at = $3, buyer_id = $4 WHERE id = $1`, [inv.id, b.role ?? null, b.accessExpiresAt ?? null, buyerId]);
       await this.audit.record(c, u.actor, 'invitation.create', 'invitation', inv.id, null, { kind: b.kind, orgId, email: b.email.replace(/^(.).*(@.*)$/, '$1***$2') });
       const link = `${this.cfg.WEB_ORIGIN}/join?token=${token}`;
-      await this.outbox.enqueue(c, 'invitation.send', inv.id, `invite-${inv.id}`, { invitationId: inv.id, email: b.email, link, buyerId });
+      // the link carries the raw token: it is stored encrypted in the outbox and scrubbed once sent
+      await this.outbox.enqueue(c, 'invitation.send', inv.id, `invite-${inv.id}`, { invitationId: inv.id, linkEnc: this.crypto.encrypt(link)!.toString('base64'), buyerId });
       // the raw token is only returned outside production (dev/test convenience); in production it only travels by email/SMS
       return { id: inv.id, expiresAt: inv.expires_at, orgId, ...(this.cfg.APP_ENV !== 'production' ? { devToken: token } : {}) };
     });
