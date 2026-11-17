@@ -126,6 +126,45 @@ describe(`settlement scenarios [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}
   });
 });
 
+describe(`buyer underpayment shortfall owed to the supplier (D-22) [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
+  it('TC-SET-08 buyer pays 900k: Mapema repaid, supplier gets 52.7k, 100k shortfall tracked; a later 100k top-up goes to the supplier and closes it', async () => {
+    const start = addDays(D0, 340);
+    const a = await newFunded('INV-S-008', start);
+    const r = await pay(90_000_000n, a.due, 'BR-S-008a', 'INV-S-008');
+    expect(r.status).toBe('applied');
+    expect(await alloc(a.advanceId)).toEqual({ p: '80000000', f: '250000', i: '4480000', s: '5270000' });
+    expect(await status(a.advanceId)).toBe('settled');
+    // the supplier sees the shortfall and is told to chase the buyer; the buyer sees what it still owes the supplier
+    const sf = (await w.supplier.get('/shortfalls')).find((x: any) => x.advance_id === a.advanceId);
+    expect(sf).toMatchObject({ status: 'open', amount_cents: '10000000', original_cents: '10000000', invoice_number: 'INV-S-008' });
+    expect((await w.buyerAdmin.get('/shortfalls')).map((x: any) => x.id)).toContain(sf.id);
+    await h.http.post('/v1/dev/jobs/run').expect(201);
+    expect(h.adapters.sms.outbox.some((m: any) => /shortfall|KES 100,000/i.test(m.text))).toBe(true);
+    // late top-up from the buyer: matched by invoice reference to the settled advance, paid through to the supplier
+    const r2 = await pay(10_000_000n, addDays(a.due, 10), 'BR-S-008b', 'INV-S-008 balance');
+    expect(r2.status).toBe('applied');
+    expect((await alloc(a.advanceId)).s).toBe('15270000');
+    const sf2 = (await w.supplier.get('/shortfalls')).find((x: any) => x.id === sf.id);
+    expect(sf2).toMatchObject({ status: 'settled', amount_cents: '0' });
+    const payouts = (await w.ops.get('/payouts?status=proposed')).filter((x: any) => x.advance_id === a.advanceId);
+    expect(payouts.map((x: any) => x.amount_cents).sort()).toEqual(['10000000', '5270000'].sort());
+  });
+
+  it('TC-SET-09 supplier can close a shortfall it recovered directly or chose to forgive (supplier admin only, reason required)', async () => {
+    const start = addDays(D0, 400);
+    const a = await newFunded('INV-S-009', start);
+    await pay(85_000_000n, a.due, 'BR-S-009', 'INV-S-009');
+    const sf = (await w.supplier.get('/shortfalls')).find((x: any) => x.advance_id === a.advanceId);
+    expect(sf.amount_cents).toBe('15000000');
+    await w.buyerAdmin.post(`/shortfalls/${sf.id}/close`, { outcome: 'recovered_directly', note: 'paid by cheque' }, 403);
+    await w.supplier.post(`/shortfalls/${sf.id}/close`, { outcome: 'recovered_directly' }, 400);
+    const c = await w.supplier.post(`/shortfalls/${sf.id}/close`, { outcome: 'recovered_directly', note: 'Buyer paid us by cheque on 12 Feb' });
+    expect(c.status).toBe('recovered_directly');
+    const ev = (await w.auditor.get('/audit/events?limit=50')).find((e: any) => e.action === 'shortfall.close' && e.entity_id === sf.id);
+    expect(ev).toBeTruthy();
+  });
+});
+
 describe('collections, disputes, complaints, DSR', () => {
   it('TC-OPS-01 late ladder D1/D7/D14/D30 then recourse by credit (step-up)', async () => {
     const start = addDays(D0, 330);

@@ -19,10 +19,10 @@ import { ADAPTERS } from '../common/config';
 import { Clock } from '../common/clock';
 import { FieldCrypto } from '../common/crypto';
 import { Db, toCents } from '../common/db';
-import { conflict, DomainError, notFound, unprocessable } from '../common/errors';
+import { conflict, DomainError, forbidden, notFound, unprocessable } from '../common/errors';
 import { zText, zUuid } from '../common/http';
 import { Notifier } from '../common/notify';
-import { AuthUser, CurrentUser, Public, Roles, StepUp } from '../auth/auth';
+import { AuthUser, BUYER_ROLES, CurrentUser, hasRole, isStaff, orgIds, Public, Roles, StepUp, SUPPLIER_ROLES } from '../auth/auth';
 import { ApprovalsService } from './approvals';
 import { normaliseInvoiceNo } from './invoices';
 
@@ -65,7 +65,10 @@ export class PaymentsService implements OnModuleInit {
       if (buyer) {
         const cands = (await c.query(`SELECT a.id, i.invoice_number_norm, i.amount_cents FROM advance a JOIN invoice i ON i.id = a.invoice_id WHERE a.buyer_id = $1 AND a.status IN ${OPEN}`, [buyer.id])).rows;
         const narr = normaliseInvoiceNo(credit.narrative ?? '');
-        const byRef = cands.filter((x: any) => narr.includes(x.invoice_number_norm));
+        // D-22: a settled advance with an open shortfall can still receive a buyer top-up, matched by reference only
+        const shortfallCands = (await c.query(`SELECT a.id, i.invoice_number_norm FROM supplier_shortfall s JOIN advance a ON a.id = s.advance_id JOIN invoice i ON i.id = a.invoice_id
+          WHERE s.buyer_id = $1 AND s.status = 'open'`, [buyer.id])).rows;
+        const byRef = [...cands, ...shortfallCands].filter((x: any) => narr.includes(x.invoice_number_norm));
         const byAmt = cands.filter((x: any) => toCents(x.amount_cents) === credit.amountCents);
         if (byRef.length === 1) { advanceId = byRef[0].id; method = 'auto_reference'; } else if (byAmt.length === 1) { advanceId = byAmt[0].id; method = 'auto_amount'; }
         if (credit.payerName && !similar(credit.payerName, buyer.legal_name)) {
@@ -157,6 +160,7 @@ export class PaymentsService implements OnModuleInit {
         await c.query(`UPDATE advance SET status = 'settled', updated_at = now() WHERE id = $1`, [a.id]);
         await c.query(`UPDATE invoice SET status = 'settled', updated_at = now() WHERE id = $1`, [a.invoice_id]);
       }
+      if (closed) await this.trackShortfall(c, a);
       let payoutId: string | null = null;
       if (supplierPortion > 0n) {
         const ba = (await c.query(`SELECT id FROM bank_account WHERE org_id = $1 AND is_payout_default AND deactivated_at IS NULL`, [a.supplier_id])).rows[0];
@@ -170,6 +174,56 @@ export class PaymentsService implements OnModuleInit {
       await this.audit.record(c, SYSTEM, 'payment.apply', 'payment', paymentId, { status: 'matched' }, {
         status, advanceId: a.id, ledgerTxn: rep.transactionId, principal: rep.principalCents, fees: rep.feesCents, interest: rep.interestCents, supplierBalance: supplierPortion, held, unapplied, settled: closed, payoutId,
       });
+    });
+  }
+
+  /**
+   * D-22 buyer underpayment: once Mapema's loan is closed, whatever the buyer has not paid up to the
+   * invoice amount is owed by the buyer to the supplier. Mapema records it and notifies both sides;
+   * the supplier chases the buyer. Later top-ups are matched to the advance and paid through.
+   */
+  private async trackShortfall(c: PoolClient, a: any) {
+    const tot = (await c.query(`SELECT COALESCE(SUM(principal_cents + fees_charges_cents + interest_cents + supplier_balance_cents),0)::bigint AS paid FROM payment_allocation WHERE advance_id = $1`, [a.id])).rows[0];
+    const invoice = toCents(a.invoice_amount_cents);
+    const paid = toCents(tot.paid);
+    const gap = invoice > paid ? invoice - paid : 0n;
+    const existing = (await c.query(`SELECT * FROM supplier_shortfall WHERE advance_id = $1 FOR UPDATE`, [a.id])).rows[0];
+    const params = { invoice: a.invoice_number, invoice_amount: formatKes(invoice), paid: formatKes(paid), amount: formatKes(gap) };
+    if (!existing) {
+      if (gap === 0n) return;
+      const s = (await c.query(`INSERT INTO supplier_shortfall (advance_id, invoice_id, buyer_id, supplier_id, original_cents, amount_cents) VALUES ($1,$2,$3,$4,$5,$5) RETURNING id`,
+        [a.id, a.invoice_id, a.buyer_id, a.supplier_id, gap])).rows[0];
+      await this.notifier.toOrg(c, a.supplier_id, 'shortfall.opened.supplier', params, { type: 'supplier_shortfall', id: s.id });
+      await this.notifier.toOrg(c, a.buyer_id, 'shortfall.opened.buyer', params, { type: 'supplier_shortfall', id: s.id });
+      await this.audit.record(c, SYSTEM, 'shortfall.open', 'supplier_shortfall', s.id, null, { advanceId: a.id, amountCents: gap });
+      return;
+    }
+    if (existing.status !== 'open') return; // closed by the supplier; later top-ups still flow through as balance
+    const status = gap === 0n ? 'settled' : 'open';
+    await c.query(`UPDATE supplier_shortfall SET amount_cents = $2, status = $3, updated_at = now() WHERE id = $1`, [existing.id, gap, status]);
+    await this.audit.record(c, SYSTEM, 'shortfall.update', 'supplier_shortfall', existing.id, { amountCents: existing.amount_cents, status: existing.status }, { amountCents: gap, status });
+    if (status === 'settled') await this.notifier.toOrg(c, a.supplier_id, 'shortfall.settled.supplier', params, { type: 'supplier_shortfall', id: existing.id });
+  }
+
+  async shortfalls(u: AuthUser) {
+    const staffView = isStaff(u) || hasRole(u, 'auditor');
+    const orgs = staffView ? null : orgIds(u, [...BUYER_ROLES, ...SUPPLIER_ROLES]);
+    return this.db.query(`SELECT s.id, s.advance_id, s.status, s.original_cents::text, s.amount_cents::text, s.currency, s.opened_at, s.updated_at, s.close_note,
+        i.invoice_number, i.amount_cents::text AS invoice_amount_cents, i.due_date, b.legal_name AS buyer_name, sp.legal_name AS supplier_name
+      FROM supplier_shortfall s JOIN invoice i ON i.id = s.invoice_id JOIN organisation b ON b.id = s.buyer_id JOIN organisation sp ON sp.id = s.supplier_id
+      WHERE ($1::uuid[] IS NULL OR s.buyer_id = ANY($1) OR s.supplier_id = ANY($1)) ORDER BY s.opened_at DESC LIMIT 500`, [orgs]);
+  }
+
+  /** The supplier (admin) may close a shortfall it recovered directly from the buyer or chose to forgive. */
+  async closeShortfall(u: AuthUser, id: string, outcome: 'recovered_directly' | 'forgiven', note: string) {
+    return this.db.tx(async (c) => {
+      const s = (await c.query(`SELECT * FROM supplier_shortfall WHERE id = $1 FOR UPDATE`, [id])).rows[0];
+      if (!s) throw notFound('Shortfall');
+      if (!u.roles.some((r) => r.role === 'supplier_admin' && r.orgId === s.supplier_id)) throw forbidden('ROLE_REQUIRED', 'Only the supplier\'s admin can close this');
+      if (s.status !== 'open') throw conflict('SHORTFALL_NOT_OPEN', 'This shortfall is already closed');
+      await c.query(`UPDATE supplier_shortfall SET status = $2, closed_by = $3, close_note = $4, updated_at = now() WHERE id = $1`, [id, outcome, u.id, note]);
+      await this.audit.record(c, u.actor, 'shortfall.close', 'supplier_shortfall', id, { status: 'open' }, { status: outcome, note });
+      return { id, status: outcome };
     });
   }
 
@@ -309,6 +363,16 @@ export class PaymentsController {
   match(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() b: unknown) {
     const body = z.object({ advanceId: zUuid, reason: zText() }).parse(b);
     return this.s.proposeManualMatch(u, zUuid.parse(id), body.advanceId, body.reason);
+  }
+
+  @Get('shortfalls')
+  shortfalls(@CurrentUser() u: AuthUser) { return this.s.shortfalls(u); }
+
+  @Post('shortfalls/:id/close')
+  @Roles('supplier_admin')
+  closeShortfall(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() b: unknown) {
+    const body = z.object({ outcome: z.enum(['recovered_directly', 'forgiven']), note: zText() }).parse(b);
+    return this.s.closeShortfall(u, zUuid.parse(id), body.outcome, body.note);
   }
 
   @Get('payouts')

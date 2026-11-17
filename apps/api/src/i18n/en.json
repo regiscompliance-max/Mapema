@@ -14,5 +14,8 @@
   "dispute.opened": "A buyer has raised a dispute on invoice {invoice}. Review it in the staff portal.",
   "dsr.received": "New data subject request {ref}. Statutory clock is running.",
   "recon.break": "Reconciliation for {date} has breaks. Review before releasing payouts.",
-  "advance.recourse": "Invoice {invoice} is now under recourse. Please contact Mapema."
+  "advance.recourse": "Invoice {invoice} is now under recourse. Please contact Mapema.",
+  "shortfall.opened.supplier": "Your buyer paid {paid} against invoice {invoice} of {invoice_amount}. Mapema has been repaid; {amount} is still owed to you by the buyer. Please follow up with them directly - any further payment they make to the collection account will be passed to you.",
+  "shortfall.opened.buyer": "Invoice {invoice}: you have paid {paid} of {invoice_amount}. {amount} is still owed to your supplier. Pay it to your usual collection account quoting {invoice}.",
+  "shortfall.settled.supplier": "The buyer has now paid the remaining balance on invoice {invoice}. Nothing more is owed to you on it."
 }
