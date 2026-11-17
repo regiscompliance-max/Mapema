@@ -102,6 +102,12 @@ describe('consents (SUP-03) and self-service data (SUP-13)', () => {
   });
 });
 
+describe('write-off candidates (ADM-07)', () => {
+  it('TC-ADM-07 the advance queue lists recourse and non-performing advances for the write-off screen', async () => {
+    for (const st of ['recourse', 'non_performing']) expect(Array.isArray(await w.credit.get(`/advances/queue?status=${st}`))).toBe(true);
+  });
+});
+
 describe('staff admin (ADM-01)', () => {
   it('TC-ADM-01 admin lists staff users with roles; others refused', async () => {
     const users = await w.admin.get('/admin/users');

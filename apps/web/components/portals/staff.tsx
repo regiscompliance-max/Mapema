@@ -4,6 +4,8 @@ import { api, newIdempotencyKey } from '@/lib/api';
 import { kesFromCents, parseKesInput } from '@/lib/money';
 import { useT } from '../lang';
 import { Msg, StatusPill, Table, Tabs, useAction, useGet } from '../ui';
+import { Field } from '../shared';
+import { CreditFile, DsrPanel, LimitsFloat, ReviewTasks, Shortfalls, StaffAdmin, WriteOffs } from './staff-extra';
 
 export function StaffPortal({ roles }: { roles: string[] }) {
   const t = useT();
@@ -11,7 +13,9 @@ export function StaffPortal({ roles }: { roles: string[] }) {
   const has = (...r: string[]) => roles.some((x) => r.includes(x));
   const tabs = [{ id: 'dash', label: t('staff.dashboard') }, { id: 'approvals', label: t('staff.approvals') }, { id: 'advances', label: t('staff.advances') },
     ...(has('ops', 'ceo') ? [{ id: 'payments', label: t('staff.payments') }, { id: 'recon', label: t('staff.recon') }] : []), { id: 'orgs', label: t('staff.orgs') },
-    ...(has('compliance') ? [{ id: 'compliance', label: t('staff.compliance') }] : []), ...(has('admin', 'ceo', 'compliance') ? [{ id: 'settings', label: t('staff.settings') }] : [])];
+    ...(has('credit', 'ceo', 'admin') ? [{ id: 'reviews', label: 'Review tasks' }] : []), ...(has('admin', 'credit') ? [{ id: 'writeoffs', label: 'Write-offs' }] : []),
+    ...(has('compliance') ? [{ id: 'compliance', label: t('staff.compliance') }] : []), ...(has('admin', 'ceo', 'compliance') ? [{ id: 'settings', label: t('staff.settings') }] : []),
+    ...(has('admin', 'ceo', 'compliance') ? [{ id: 'people', label: 'Staff' }] : [])];
   return (
     <div>
       <Tabs active={tab} onChange={setTab} tabs={tabs} />
@@ -20,9 +24,12 @@ export function StaffPortal({ roles }: { roles: string[] }) {
       {tab === 'advances' && <Advances canCredit={has('credit')} canOps={has('ops')} />}
       {tab === 'payments' && <Payments />}
       {tab === 'recon' && <Recon />}
-      {tab === 'orgs' && <Orgs />}
+      {tab === 'orgs' && <Orgs canCredit={has('credit')} />}
+      {tab === 'reviews' && <ReviewTasks canCredit={has('credit')} />}
+      {tab === 'writeoffs' && <WriteOffs />}
       {tab === 'compliance' && <Compliance />}
-      {tab === 'settings' && <Settings />}
+      {tab === 'settings' && <><Settings />{has('admin', 'ceo', 'credit') && <div className="mt-6"><LimitsFloat /></div>}</>}
+      {tab === 'people' && <StaffAdmin />}
     </div>
   );
 }
@@ -72,6 +79,7 @@ function Payments() {
       <h2 className="h2">Supplier balances to release today</h2>
       <Table rows={payouts.data} cols={[{ key: 'invoice_number', label: 'Invoice' }, { key: 'supplier_name', label: 'Supplier' }, { key: 'amount_cents', label: 'Balance', money: true },
         { key: 'x', label: '', render: (r) => <button className="btn !min-h-10 !py-2" disabled={busy} onClick={() => run(() => api(`/payouts/${r.id}/release`, { body: {} }), 'Balance sent').then(payouts.reload)}>Release</button> }]} />
+      <Shortfalls />
       <h2 className="h2">Unmatched receipts</h2>
       <Table rows={unmatched.data} cols={[{ key: 'bank_ref', label: 'Bank ref' }, { key: 'payer_name', label: 'Payer' }, { key: 'narrative', label: 'Narrative' }, { key: 'amount_cents', label: 'Amount', money: true },
         { key: 'x', label: '', render: (r) => <button className="underline" onClick={() => { const adv = prompt('Advance id to match'); if (adv) void run(() => api(`/payments/${r.id}/match`, { body: { advanceId: adv, reason: prompt('Evidence') ?? 'manual' } }), 'Match proposed - a second ops user must approve'); }}>Match…</button> }]} />
@@ -86,36 +94,31 @@ function Recon() {
     <Table rows={data} cols={[{ key: 'as_of_date', label: 'Date', render: (r) => String(r.as_of_date).slice(0, 10) }, { key: 'bank_balance_cents', label: 'Bank', money: true }, { key: 'fineract_cash_cents', label: 'Ledger', money: true }, { key: 'platform_cash_cents', label: 'Platform', money: true }, { key: 'status', label: 'Status', render: (r) => <StatusPill s={r.status} /> }, { key: 'open_breaks', label: 'Open breaks' }]} /></div>);
 }
 
-function Orgs() {
+function Orgs({ canCredit }: { canCredit: boolean }) {
   const { data, reload } = useGet<any[]>('/organisations');
   const { busy, msg, run } = useAction();
+  const [open, setOpen] = useState<string | null>(null);
+  if (open) return <CreditFile orgId={open} canCredit={canCredit} onClose={() => setOpen(null)} />;
   const create = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)); void run(() => api('/organisations', { body: { type: 'buyer', ...f } }), 'Buyer prospect created').then(reload); };
   return (
     <div className="space-y-4">
       <form onSubmit={create} className="card grid gap-3 sm:grid-cols-2"><h3 className="h2 sm:col-span-2">New buyer prospect</h3>
-        <input name="legalName" required placeholder="Legal name" className="input" /><input name="kraPin" required placeholder="KRA PIN" className="input" />
-        <input name="registrationNo" required placeholder="Registration no." className="input" /><input name="sectorCode" required placeholder="Sector code (e.g. FMCG)" className="input" />
+        <Field label="Legal name"><input name="legalName" required className="input" /></Field><Field label="KRA PIN"><input name="kraPin" required className="input" /></Field>
+        <Field label="Registration no."><input name="registrationNo" required className="input" /></Field><Field label="Sector code (e.g. FMCG)"><input name="sectorCode" required className="input" /></Field>
         <button className="btn sm:col-span-2" disabled={busy}>Create</button></form>
       <Msg msg={msg} />
       <Table rows={data} cols={[{ key: 'legal_name', label: 'Name' }, { key: 'type', label: 'Type' }, { key: 'kra_pin', label: 'KRA PIN' }, { key: 'sector_code', label: 'Sector' }, { key: 'status', label: 'Status', render: (r) => <StatusPill s={r.status} /> },
-        { key: 'x', label: '', render: (r) => r.type === 'buyer'
-          ? <button className="underline" onClick={() => run(() => api(`/organisations/${r.id}/crb-pull`, { body: {} }), 'CRB report pulled')}>Pull CRB</button>
-          : <button className="underline" onClick={() => run(async () => {
-              const org = await api<any>(`/organisations/${r.id}`);
-              const kes = prompt(`Supplier limit in KES for ${org.supplierLinks[0]?.buyer_name}`); if (!kes) throw Object.assign(new Error('cancelled'), { code: 'CANCELLED' });
-              const cents = parseKesInput(kes); if (cents === null) throw Object.assign(new Error('not a KES amount'), { code: 'BAD_AMOUNT' });
-              await api(`/supplier-links/${org.supplierLinks[0].id}/limit`, { body: { limitCents: cents.toString(), reason: prompt('Reason') ?? 'credit review' } });
-            }, 'Limit proposed - a second credit officer must approve')}>Set limit…</button> }]} />
+        { key: 'x', label: '', render: (r) => <button className="underline" onClick={() => setOpen(r.id)}>Open credit file</button> }]} />
     </div>
   );
 }
 
 function Compliance() {
-  const aml = useGet<any[]>('/aml-flags'); const complaints = useGet<any[]>('/complaints'); const dsr = useGet<any[]>('/dsr');
+  const aml = useGet<any[]>('/aml-flags'); const complaints = useGet<any[]>('/complaints');
   return (<div className="space-y-6">
     <h2 className="h2">AML flags (never disclose to the customer)</h2><Table rows={aml.data} cols={[{ key: 'rule_code', label: 'Rule' }, { key: 'legal_name', label: 'Organisation' }, { key: 'status', label: 'Status' }, { key: 'created_at', label: 'Raised', render: (r) => String(r.created_at).slice(0, 10) }]} />
     <h2 className="h2">Complaints</h2><Table rows={complaints.data} cols={[{ key: 'category', label: 'Category' }, { key: 'status', label: 'Status' }, { key: 'resolve_due_at', label: 'Due', render: (r) => String(r.resolve_due_at).slice(0, 10) }, { key: 'overdue', label: 'Overdue', render: (r) => r.overdue ? 'YES' : '' }]} />
-    <h2 className="h2">Data subject requests</h2><Table rows={dsr.data} cols={[{ key: 'type', label: 'Type' }, { key: 'requester_email', label: 'Requester' }, { key: 'status', label: 'Status' }, { key: 'due_at', label: 'Due', render: (r) => String(r.due_at).slice(0, 10) }]} />
+    <DsrPanel />
   </div>);
 }
 

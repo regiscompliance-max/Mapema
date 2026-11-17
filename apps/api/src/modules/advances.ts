@@ -218,7 +218,8 @@ export class AdvancesService implements OnModuleInit {
        FROM advance a JOIN invoice i ON i.id = a.invoice_id JOIN organisation b ON b.id = a.buyer_id JOIN organisation s ON s.id = a.supplier_id
        WHERE a.status = $1 ORDER BY a.created_at`, [status]);
     const out = [];
-    for (const r of rows) out.push({ ...r, checks: (await this.checks(this.db.pool, r.id)).checks });
+    const decisionStage = ['requested', 'approved'].includes(status); // checks only matter before money moves
+    for (const r of rows) out.push({ ...r, checks: decisionStage ? (await this.checks(this.db.pool, r.id)).checks : [] });
     return out;
   }
 
@@ -398,7 +399,7 @@ export class AdvancesController {
   @Get('advances/queue')
   @Roles('credit', 'ops', 'ceo', 'admin')
   queue(@Query('status') status?: string) {
-    return this.s.queue(z.enum(['requested', 'approved', 'released', 'funded', 'late', 'release_failed']).default('requested').parse(status));
+    return this.s.queue(z.enum(['requested', 'approved', 'released', 'funded', 'late', 'release_failed', 'recourse', 'non_performing']).default('requested').parse(status));
   }
 
   @Get('advances/:id')

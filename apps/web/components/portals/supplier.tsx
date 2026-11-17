@@ -1,19 +1,23 @@
 'use client';
 import { FormEvent, useState } from 'react';
 import { api, newIdempotencyKey } from '@/lib/api';
-import { kesFromCents, bps } from '@/lib/money';
+import { kesFromCents, bps, parseKesInput } from '@/lib/money';
+import { Consents, Documents, Field, MyData, Shortfalls, TermsExplained } from '../shared';
 import { useT } from '../lang';
 import { Msg, StatusPill, Table, Tabs, useAction, useGet } from '../ui';
 
-export function SupplierPortal({ orgId }: { orgId: string }) {
+export function SupplierPortal({ orgId, roles = [] }: { orgId: string; roles?: string[] }) {
   const t = useT();
   const [tab, setTab] = useState('invoices');
   return (
     <div>
-      <Tabs active={tab} onChange={setTab} tabs={[{ id: 'invoices', label: t('supplier.title') }, { id: 'advances', label: t('supplier.advances') }, { id: 'account', label: 'Account' }, { id: 'help', label: t('footer.complaints') }]} />
+      <Tabs active={tab} onChange={setTab} tabs={[{ id: 'invoices', label: t('supplier.title') }, { id: 'submit', label: 'Add invoice' }, { id: 'advances', label: t('supplier.advances') }, { id: 'account', label: 'Account' },
+        { id: 'privacy', label: 'Privacy' }, { id: 'help', label: t('footer.complaints') }]} />
       {tab === 'invoices' && <Invoices />}
-      {tab === 'advances' && <Advances />}
+      {tab === 'submit' && <SubmitInvoice orgId={orgId} />}
+      {tab === 'advances' && <><Advances /><div className="mt-6"><Shortfalls canClose={roles.includes('supplier_admin')} /></div></>}
       {tab === 'account' && <Account orgId={orgId} />}
+      {tab === 'privacy' && <div className="space-y-8"><Consents orgId={orgId} /><MyData /></div>}
       {tab === 'help' && <Complaints />}
     </div>
   );
@@ -34,6 +38,7 @@ function Invoices() {
         <div className="flex justify-between py-2 text-sm"><dt>{t('calc.apr')}</dt><dd>{bps(offer.aprBps)}</dd></div>
       </dl>
       <ul className="list-disc space-y-1 pl-5 text-sm">{offer.explanation.map((x: string) => <li key={x}>{x}</li>)}</ul>
+      <details className="text-sm"><summary className="cursor-pointer underline">How early repayment and recourse work</summary><TermsExplained example={{ advanceCents: offer.advanceCents, discountFeeCents: offer.discountFeeCents, days: offer.days ?? 0 }} /></details>
       <p className="text-xs text-slate-500">Terms {offer.termsVersion} · Key information {offer.kidVersion} · Offer valid until {new Date(offer.expiresAt).toLocaleTimeString()}</p>
       <label className="flex gap-2"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> {t('supplier.accept')}</label>
       <div className="flex gap-3">
@@ -70,16 +75,18 @@ function Account({ orgId }: { orgId: string }) {
       <p>Status: <StatusPill s={org?.status ?? '…'} /></p>
       <form onSubmit={person} className="card grid gap-3 sm:grid-cols-2">
         <h3 className="h2 sm:col-span-2">Director / signatory</h3>
-        <input name="fullName" required placeholder="Full name" className="input" /><input name="nationalId" required placeholder="ID number" className="input" />
-        <input name="email" type="email" placeholder="Email" className="input" /><input name="phone" placeholder="+2547…" className="input" />
+        <Field label="Full name"><input name="fullName" required className="input" autoComplete="name" /></Field><Field label="ID number"><input name="nationalId" required className="input" /></Field>
+        <Field label="Email"><input name="email" type="email" className="input" autoComplete="email" /></Field><Field label="Mobile (+2547…)"><input name="phone" type="tel" className="input" autoComplete="tel" /></Field>
         <button className="btn sm:col-span-2" disabled={busy}>Add</button>
       </form>
       <form onSubmit={bank} className="card grid gap-3 sm:grid-cols-2">
         <h3 className="h2 sm:col-span-2">Payout bank account</h3>
-        <input name="bankCode" required placeholder="Bank code (e.g. 11)" className="input" /><input name="accountName" required placeholder="Account name" className="input" />
-        <input name="accountNumber" required inputMode="numeric" placeholder="Account number" className="input sm:col-span-2" />
+        <Field label="Bank code (e.g. 11)"><input name="bankCode" required inputMode="numeric" className="input" /></Field><Field label="Account name"><input name="accountName" required className="input" /></Field>
+        <Field label="Account number" className="sm:col-span-2"><input name="accountNumber" required inputMode="numeric" className="input" /></Field>
         <button className="btn sm:col-span-2" disabled={busy}>Save</button>
       </form>
+      <Documents orgId={orgId} story="SUP-02" />
+      <TermsExplained />
       <div className="flex flex-col gap-3 sm:flex-row">
         <button className="btn" disabled={busy} onClick={() => run(() => api(`/organisations/${orgId}/submit`, { body: {} }), 'Submitted for verification').then(reload)}>Submit for verification</button>
         <button className="btn-secondary" disabled={busy} onClick={() => run(() => api(`/organisations/${orgId}/agreements`, { body: {} }), 'Agreement sent for e-signature')}>Sign master agreement</button>
@@ -96,12 +103,43 @@ export function Complaints() {
   return (
     <div className="space-y-4">
       <form onSubmit={submit} className="card space-y-3">
-        <select name="category" className="input">{['pricing', 'service', 'payout', 'data', 'conduct', 'other'].map((c) => <option key={c}>{c}</option>)}</select>
-        <textarea name="description" required className="input" rows={4} placeholder="Tell us what happened" />
+        <Field label="What is it about?"><select name="category" className="input">{['pricing', 'service', 'payout', 'data', 'conduct', 'other'].map((c) => <option key={c}>{c}</option>)}</select></Field>
+        <Field label="Tell us what happened"><textarea name="description" required className="input" rows={4} /></Field>
         <button className="btn" disabled={busy}>Send</button>
       </form>
       <Msg msg={msg} />
       <Table rows={data} cols={[{ key: 'category', label: 'Category' }, { key: 'status', label: 'Status' }, { key: 'resolve_due_at', label: 'Resolve by', render: (r) => String(r.resolve_due_at).slice(0, 10) }]} />
     </div>
+  );
+}
+
+/** SUP-06 the supplier adds an invoice for its buyer to confirm. */
+function SubmitInvoice({ orgId }: { orgId: string }) {
+  const { data: org } = useGet<any>(`/organisations/${orgId}`);
+  const { busy, msg, run } = useAction();
+  const buyers = (org?.supplierLinks ?? []).filter((l: any) => l.supplier_id === orgId);
+  const submit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault(); const form = e.currentTarget; const f = Object.fromEntries(new FormData(form)) as Record<string, string>;
+    const cents = parseKesInput(f.amount);
+    void run(async () => {
+      if (cents === null) throw Object.assign(new Error('Enter the amount in KES, e.g. 125000.50'), { code: 'BAD_AMOUNT' });
+      await api('/invoices', { body: { buyerId: f.buyer, supplierKraPin: org.kra_pin, invoiceNumber: f.number, amountCents: cents.toString(), currency: 'KES', issueDate: f.issue, dueDate: f.due, etimsCuInvoiceNo: f.cu || undefined, poReference: f.po || undefined } });
+      form.reset();
+    }, 'Invoice sent to your buyer to confirm. You can ask for early payment once they confirm it.');
+  };
+  return (
+    <form data-story="SUP-06" onSubmit={submit} className="card grid gap-3 sm:grid-cols-2" aria-labelledby="si-h">
+      <h2 id="si-h" className="h2 sm:col-span-2">Add an invoice</h2>
+      <Field label="Buyer" className="sm:col-span-2"><select name="buyer" required className="input">{buyers.map((b: any) => <option key={b.buyer_id} value={b.buyer_id}>{b.buyer_name}</option>)}</select></Field>
+      <Field label="Invoice number"><input name="number" required className="input" /></Field>
+      <Field label="Amount (KES)"><input name="amount" required inputMode="decimal" className="input" /></Field>
+      <Field label="Issue date"><input name="issue" type="date" required className="input" /></Field>
+      <Field label="Due date"><input name="due" type="date" required className="input" /></Field>
+      <Field label="eTIMS CU invoice number"><input name="cu" className="input" /></Field>
+      <Field label="PO reference (optional)"><input name="po" className="input" /></Field>
+      <button className="btn sm:col-span-2" disabled={busy || !buyers.length}>Send to buyer</button>
+      {!buyers.length && <p className="text-sm sm:col-span-2">You can add invoices once a buyer has invited you.</p>}
+      <div className="sm:col-span-2"><Msg msg={msg} /></div>
+    </form>
   );
 }

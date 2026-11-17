@@ -24,7 +24,7 @@ export default function AppHome() {
     <div className="space-y-4">
       <div className="flex items-center justify-between"><p className="text-sm text-slate-600">{me.data.displayName} · {roles.join(', ')}</p>
         <button className="underline" onClick={() => { void signOut().finally(() => router.push('/')); }}>{t('portal.signout')}</button></div>
-      {me.data.staff ? <StaffPortal roles={roles} /> : roles.includes('auditor') ? <AuditorPortal /> : roles.some((r) => r.startsWith('buyer_')) ? <BuyerPortal roles={roles} orgId={org} /> : <SupplierPortal orgId={org} />}
+      {me.data.staff ? <StaffPortal roles={roles} /> : roles.includes('auditor') ? <AuditorPortal /> : roles.some((r) => r.startsWith('buyer_')) ? <BuyerPortal roles={roles} orgId={org} /> : <SupplierPortal orgId={org} roles={roles} />}
     </div>
   );
 }
