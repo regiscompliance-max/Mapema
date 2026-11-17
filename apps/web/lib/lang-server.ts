@@ -1,9 +1,8 @@
-import { cookies } from 'next/headers';
-import { isLang, Lang, translate } from './i18n';
+import { Lang, translate } from './i18n';
 
+/** Static public site: English only (no cookies at build time). Swahili toggle returns with a server-rendered site. */
 export async function serverLang(): Promise<Lang> {
-  const v = (await cookies()).get('lang')?.value;
-  return isLang(v) ? v : 'en';
+  return 'en';
 }
 export async function serverT() {
   const lang = await serverLang();

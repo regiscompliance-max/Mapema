@@ -1,0 +1,28 @@
+1:"$Sreact.fragment"
+2:"/_next/static/chunks/16lo-qncm6gke.js"
+3:I[80480,["$2"],"LangProvider"]
+4:I[22016,["$2"],""]
+5:I[39756,["$2"],"default"]
+6:I[37457,["$2"],"default"]
+d:I[97367,["$2"],"OutletBoundary"]
+e:"$Sreact.suspense"
+11:"ViewportBoundary"
+12:I[97367,["$2"],"$11"]
+13:"MetadataBoundary"
+14:I[97367,["$2"],"$13"]
+:HL["/_next/static/chunks/16v42jjflshm8.css","style"]
+8:X
+b:X
+b:C
+c:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$1","c",{"children":[["$","div",null,{"className":"space-y-4","children":[["$","h1",null,{"className":"h1","children":"Our licence"}],["$","p",null,{"className":"card text-lg","children":"Mapema is not yet licensed by the Central Bank of Kenya as a non-deposit-taking credit provider. We do not provide credit until we are licensed."}],["$","p",null,{"className":"text-sm text-slate-600","children":"Central Bank of Kenya, Haile Selassie Avenue, Nairobi. You can check licensed non-deposit-taking credit providers on the CBK website."}]]}],null,["$","$Ld",null,{"children":["$","$e",null,{"name":"Next.MetadataOutlet","children":"$@f"}]}]]}],"p":"$@10","v":null,"s":"$8"}}]]
+9:[["children",{"s":"cbk-status","h":96,"d":{"r":["$","$1","c",{"children":[null,["$","$L5",null,{"parallelRouterKey":"children","template":["$","$L6",null,{}]}]]}],"p":"$@a","v":"$b","s":"$8"},"c":"$Qc"}]]
+0:{"t":{"t":{"s":"","h":80,"d":{"r":["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/16v42jjflshm8.css","precedence":"next"}],["$","script","script-0",{"src":"/_next/static/chunks/16lo-qncm6gke.js","async":true}]],["$","html",null,{"lang":"en","children":["$","body",null,{"children":["$","$L3",null,{"lang":"en","children":[["$","a",null,{"href":"#main","className":"sr-only focus:not-sr-only","children":"Skip to content"}],["$","header",null,{"className":"border-b border-slate-200","children":["$","nav",null,{"className":"mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3","aria-label":"Main","children":[["$","$L4",null,{"href":"/","className":"mr-auto text-xl font-bold text-brand","children":"Mapema"}],["$","$L4",null,{"href":"/buyers","className":"py-2","children":"For buyers"}],["$","$L4",null,{"href":"/suppliers","className":"py-2","children":"For suppliers"}],["$","$L4",null,{"href":"/pricing","className":"py-2","children":"Fees"}],["$","span",null,{"className":"rounded border border-slate-300 px-3 py-2 text-sm text-slate-600","data-testid":"portal-soon","children":"Portal coming soon"}]]}]}],["$","main",null,{"id":"main","className":"mx-auto max-w-5xl px-4 py-8","children":["$","$L5",null,{"parallelRouterKey":"children","template":["$","$L6",null,{}],"notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],[]]}]}],["$","footer",null,{"className":"mt-16 border-t border-slate-200 bg-slate-50","children":["$","div",null,{"className":"mx-auto max-w-5xl space-y-3 px-4 py-8 text-sm text-slate-600","children":[["$","p",null,{"data-testid":"cbk-statement","children":"Mapema is not yet licensed by the Central Bank of Kenya as a non-deposit-taking credit provider. We do not provide credit until we are licensed."}],["$","ul",null,{"className":"flex flex-wrap gap-x-4 gap-y-2","children":[["$","li",null,{"children":["$","$L4",null,{"href":"/complaints","children":"Complaints"}]}],["$","li",null,{"children":["$","$L4",null,{"href":"/legal/privacy","children":"Privacy notice"}]}],["$","li",null,{"children":["$","$L4",null,{"href":"/legal/terms","children":"Terms"}]}],["$","li",null,{"children":["$","$L4",null,{"href":"/data-protection","children":"Your data rights"}]}],["$","li",null,{"children":["$","$L4",null,{"href":"/cbk-status","children":"CBK licence status"}]}]]}],["$","p",null,{"children":["© ",2026," Mapema Limited, Nairobi, Kenya."]}]]}]}]]}]}]}]]}],"p":"$@7","v":null,"s":"$8"},"c":"$Q9"},"h":{"r":["$","$1","h",{"children":[null,["$","$L12",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L14",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$e",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"Mapema - get paid early on approved invoices"}],["$","meta","1",{"name":"description","content":"Buyer-led supplier early payment in Kenya."}]]}]}],null]}],null]}],"p":"$@15","v":null,"s":"$8"}},"a":"$@16","u":"$@17","b":"esp3Lwe0uKImrL7p_hWvQ"}
+f:null
+8:300
+17:true
+8:C
+16:0
+a:"$undefined"
+7:"$undefined"
+15:"$undefined"
+10:"$undefined"

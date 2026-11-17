@@ -1,12 +1,8 @@
 import Link from 'next/link';
 import { Lang, translate } from '@/lib/i18n';
-import { API_URL } from '@/lib/api';
 
+/** Static site: no API call. Lending stays off until a CBK licence number is entered in the platform. */
 export async function cbkStatus(): Promise<{ lendingEnabled: boolean; cbkLicenceNo: string | null; statement: string }> {
-  try {
-    const r = await fetch(`${API_URL}/v1/public/cbk-status`, { next: { revalidate: 300 } });
-    if (r.ok) return r.json();
-  } catch { /* API unreachable at build time */ }
   return { lendingEnabled: false, cbkLicenceNo: null, statement: 'Mapema is not yet licensed by the Central Bank of Kenya as a non-deposit-taking credit provider. We do not provide credit until we are licensed.' };
 }
 
@@ -19,8 +15,7 @@ export function Header({ lang }: { lang: Lang }) {
         <Link href="/buyers" className="py-2">{t('nav.buyers')}</Link>
         <Link href="/suppliers" className="py-2">{t('nav.suppliers')}</Link>
         <Link href="/pricing" className="py-2">{t('nav.pricing')}</Link>
-        <Link href={`/lang?to=${lang === 'en' ? 'sw' : 'en'}`} className="py-2 text-sm underline" prefetch={false}>{t('nav.lang')}</Link>
-        <Link href="/signin" className="btn-secondary !min-h-10 !py-2">{t('nav.signin')}</Link>
+        <span className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-600" data-testid="portal-soon">{t('nav.portalSoon')}</span>
       </nav>
     </header>
   );

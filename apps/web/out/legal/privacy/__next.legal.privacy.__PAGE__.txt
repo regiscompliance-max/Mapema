@@ -1,0 +1,39 @@
+1:"$Sreact.fragment"
+2:"/_next/static/chunks/16lo-qncm6gke.js"
+3:I[80480,["$2"],"LangProvider"]
+4:I[22016,["$2"],""]
+5:I[39756,["$2"],"default"]
+6:I[37457,["$2"],"default"]
+19:"ViewportBoundary"
+1a:I[97367,["$2"],"$19"]
+1b:"MetadataBoundary"
+1c:I[97367,["$2"],"$1b"]
+1d:"$Sreact.suspense"
+:HL["/_next/static/chunks/16v42jjflshm8.css","style"]
+8:X
+b:X
+b:C
+e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$1","c",{"children":[["$","article",null,{"className":"prose max-w-none space-y-4","children":[["$","p",null,{"className":"rounded bg-amber-50 p-3 text-sm","children":"DRAFT privacy notice (version PN-2026-11-v1). Must be reviewed by Kenyan counsel and checked against Mapema's ODPC registration before launch."}],["$","h1",null,{"className":"h1","children":"Privacy notice"}],["$","p",null,{"children":"Mapema Limited (\"Mapema\") is the data controller for personal data processed on this website and in the Mapema portals, under the Data Protection Act, 2019."}],["$","h2",null,{"className":"h2","children":"What we collect"}],["$","p",null,{"children":"Company details; names, ID numbers, dates of birth, phone numbers and emails of directors, owners and authorised users; bank account details; invoice data; credit bureau reports (with consent); records of what you accepted and when."}],"$Lf","$L10","$L11","$L12","$L13","$L14","$L15","$L16"]}],null,"$L17"]}],"p":"$@18","v":null,"s":"$8"}}]]
+c:[["children",{"s":"privacy","h":96,"d":{"r":["$","$1","c",{"children":[null,["$","$L5",null,{"parallelRouterKey":"children","template":["$","$L6",null,{}]}]]}],"p":"$@d","v":"$b","s":"$8"},"c":"$Qe"}]]
+9:[["children",{"s":"legal","h":96,"d":{"r":["$","$1","c",{"children":[null,["$","$L5",null,{"parallelRouterKey":"children","template":["$","$L6",null,{}]}]]}],"p":"$@a","v":"$b","s":"$8"},"c":"$Qc"}]]
+0:{"t":{"t":{"s":"","h":80,"d":{"r":["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/16v42jjflshm8.css","precedence":"next"}],["$","script","script-0",{"src":"/_next/static/chunks/16lo-qncm6gke.js","async":true}]],["$","html",null,{"lang":"en","children":["$","body",null,{"children":["$","$L3",null,{"lang":"en","children":[["$","a",null,{"href":"#main","className":"sr-only focus:not-sr-only","children":"Skip to content"}],["$","header",null,{"className":"border-b border-slate-200","children":["$","nav",null,{"className":"mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3","aria-label":"Main","children":[["$","$L4",null,{"href":"/","className":"mr-auto text-xl font-bold text-brand","children":"Mapema"}],["$","$L4",null,{"href":"/buyers","className":"py-2","children":"For buyers"}],["$","$L4",null,{"href":"/suppliers","className":"py-2","children":"For suppliers"}],["$","$L4",null,{"href":"/pricing","className":"py-2","children":"Fees"}],["$","span",null,{"className":"rounded border border-slate-300 px-3 py-2 text-sm text-slate-600","data-testid":"portal-soon","children":"Portal coming soon"}]]}]}],["$","main",null,{"id":"main","className":"mx-auto max-w-5xl px-4 py-8","children":["$","$L5",null,{"parallelRouterKey":"children","template":["$","$L6",null,{}],"notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],[]]}]}],["$","footer",null,{"className":"mt-16 border-t border-slate-200 bg-slate-50","children":["$","div",null,{"className":"mx-auto max-w-5xl space-y-3 px-4 py-8 text-sm text-slate-600","children":[["$","p",null,{"data-testid":"cbk-statement","children":"Mapema is not yet licensed by the Central Bank of Kenya as a non-deposit-taking credit provider. We do not provide credit until we are licensed."}],["$","ul",null,{"className":"flex flex-wrap gap-x-4 gap-y-2","children":[["$","li",null,{"children":["$","$L4",null,{"href":"/complaints","children":"Complaints"}]}],["$","li",null,{"children":["$","$L4",null,{"href":"/legal/privacy","children":"Privacy notice"}]}],["$","li",null,{"children":["$","$L4",null,{"href":"/legal/terms","children":"Terms"}]}],["$","li",null,{"children":["$","$L4",null,{"href":"/data-protection","children":"Your data rights"}]}],["$","li",null,{"children":["$","$L4",null,{"href":"/cbk-status","children":"CBK licence status"}]}]]}],["$","p",null,{"children":["© ",2026," Mapema Limited, Nairobi, Kenya."]}]]}]}]]}]}]}]]}],"p":"$@7","v":null,"s":"$8"},"c":"$Q9"},"h":{"r":["$","$1","h",{"children":[null,["$","$L1a",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L1c",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$1d",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"Mapema - get paid early on approved invoices"}],["$","meta","1",{"name":"description","content":"Buyer-led supplier early payment in Kenya."}]]}]}],null]}],null]}],"p":"$@1e","v":null,"s":"$8"}},"a":"$@1f","u":"$@20","b":"esp3Lwe0uKImrL7p_hWvQ"}
+21:I[97367,["$2"],"OutletBoundary"]
+f:["$","h2",null,{"className":"h2","children":"Why, and on what basis"}]
+10:["$","p",null,{"children":"To verify who you are and prevent fraud and money laundering (legal obligation); to provide early payment (contract); to assess credit (consent for credit bureau checks, and our legitimate interest); to meet Central Bank of Kenya record-keeping rules (legal obligation). We do not use your data for marketing unless you opt in."}]
+11:["$","h2",null,{"className":"h2","children":"Who we share it with"}]
+12:["$","p",null,{"children":"Our bank, identity-verification and credit-reference providers, KRA eTIMS (to check invoices), e-signature, SMS and email providers, our auditors and regulators. We sign data processing agreements with each provider. Data is hosted in Kenya or the nearest African cloud region; any transfer outside Kenya follows sections 48 to 50 of the Act."}]
+13:["$","h2",null,{"className":"h2","children":"How long we keep it"}]
+14:["$","p",null,{"children":"Loan and transaction records for the period the law requires after the relationship ends (draft assumes 7 years; counsel to confirm); marketing data until you withdraw consent."}]
+15:["$","h2",null,{"className":"h2","children":"Your rights"}]
+16:["$","p",null,{"children":["You can ask to access, correct, delete or move your data, or object to or restrict its use, at ",["$","a",null,{"className":"underline","href":"/data-protection","children":"Your data rights"}],". You can complain to the Office of the Data Protection Commissioner."]}]
+17:["$","$L21",null,{"children":["$","$1d",null,{"name":"Next.MetadataOutlet","children":"$@22"}]}]
+8:300
+22:null
+20:true
+8:C
+1f:0
+d:"$undefined"
+a:"$undefined"
+7:"$undefined"
+1e:"$undefined"
+18:"$undefined"

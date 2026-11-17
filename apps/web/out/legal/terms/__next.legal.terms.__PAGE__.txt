@@ -1,0 +1,36 @@
+1:"$Sreact.fragment"
+2:"/_next/static/chunks/16lo-qncm6gke.js"
+3:I[80480,["$2"],"LangProvider"]
+4:I[22016,["$2"],""]
+5:I[39756,["$2"],"default"]
+6:I[37457,["$2"],"default"]
+16:"ViewportBoundary"
+17:I[97367,["$2"],"$16"]
+18:"MetadataBoundary"
+19:I[97367,["$2"],"$18"]
+1a:"$Sreact.suspense"
+:HL["/_next/static/chunks/16v42jjflshm8.css","style"]
+8:X
+b:X
+b:C
+e:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$1","c",{"children":[["$","article",null,{"className":"space-y-4","children":[["$","p",null,{"className":"rounded bg-amber-50 p-3 text-sm","children":"DRAFT summary of terms (MA-2026-11-v1). The signed Master Receivables Purchase Agreement and Deed of Assignment govern. Wording subject to Kenyan counsel review before launch."}],["$","h1",null,{"className":"h1","children":"Terms in plain language"}],["$","ul",null,{"className":"list-disc space-y-2 pl-6","children":[["$","li",null,{"children":"When you accept an offer, you assign the whole invoice to Mapema."}],["$","li",null,{"children":"Mapema pays you the advance shown in the offer. When your buyer pays, Mapema pays you the balance of the price within 1 business day."}],"$Lf","$L10","$L11","$L12","$L13"]}]]}],null,"$L14"]}],"p":"$@15","v":null,"s":"$8"}}]]
+c:[["children",{"s":"terms","h":96,"d":{"r":["$","$1","c",{"children":[null,["$","$L5",null,{"parallelRouterKey":"children","template":["$","$L6",null,{}]}]]}],"p":"$@d","v":"$b","s":"$8"},"c":"$Qe"}]]
+9:[["children",{"s":"legal","h":96,"d":{"r":["$","$1","c",{"children":[null,["$","$L5",null,{"parallelRouterKey":"children","template":["$","$L6",null,{}]}]]}],"p":"$@a","v":"$b","s":"$8"},"c":"$Qc"}]]
+0:{"t":{"t":{"s":"","h":80,"d":{"r":["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/16v42jjflshm8.css","precedence":"next"}],["$","script","script-0",{"src":"/_next/static/chunks/16lo-qncm6gke.js","async":true}]],["$","html",null,{"lang":"en","children":["$","body",null,{"children":["$","$L3",null,{"lang":"en","children":[["$","a",null,{"href":"#main","className":"sr-only focus:not-sr-only","children":"Skip to content"}],["$","header",null,{"className":"border-b border-slate-200","children":["$","nav",null,{"className":"mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3","aria-label":"Main","children":[["$","$L4",null,{"href":"/","className":"mr-auto text-xl font-bold text-brand","children":"Mapema"}],["$","$L4",null,{"href":"/buyers","className":"py-2","children":"For buyers"}],["$","$L4",null,{"href":"/suppliers","className":"py-2","children":"For suppliers"}],["$","$L4",null,{"href":"/pricing","className":"py-2","children":"Fees"}],["$","span",null,{"className":"rounded border border-slate-300 px-3 py-2 text-sm text-slate-600","data-testid":"portal-soon","children":"Portal coming soon"}]]}]}],["$","main",null,{"id":"main","className":"mx-auto max-w-5xl px-4 py-8","children":["$","$L5",null,{"parallelRouterKey":"children","template":["$","$L6",null,{}],"notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],[]]}]}],["$","footer",null,{"className":"mt-16 border-t border-slate-200 bg-slate-50","children":["$","div",null,{"className":"mx-auto max-w-5xl space-y-3 px-4 py-8 text-sm text-slate-600","children":[["$","p",null,{"data-testid":"cbk-statement","children":"Mapema is not yet licensed by the Central Bank of Kenya as a non-deposit-taking credit provider. We do not provide credit until we are licensed."}],["$","ul",null,{"className":"flex flex-wrap gap-x-4 gap-y-2","children":[["$","li",null,{"children":["$","$L4",null,{"href":"/complaints","children":"Complaints"}]}],["$","li",null,{"children":["$","$L4",null,{"href":"/legal/privacy","children":"Privacy notice"}]}],["$","li",null,{"children":["$","$L4",null,{"href":"/legal/terms","children":"Terms"}]}],["$","li",null,{"children":["$","$L4",null,{"href":"/data-protection","children":"Your data rights"}]}],["$","li",null,{"children":["$","$L4",null,{"href":"/cbk-status","children":"CBK licence status"}]}]]}],["$","p",null,{"children":["© ",2026," Mapema Limited, Nairobi, Kenya."]}]]}]}]]}]}]}]]}],"p":"$@7","v":null,"s":"$8"},"c":"$Q9"},"h":{"r":["$","$1","h",{"children":[null,["$","$L17",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L19",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$1a",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"Mapema - get paid early on approved invoices"}],["$","meta","1",{"name":"description","content":"Buyer-led supplier early payment in Kenya."}]]}]}],null]}],null]}],"p":"$@1b","v":null,"s":"$8"}},"a":"$@1c","u":"$@1d","b":"esp3Lwe0uKImrL7p_hWvQ"}
+1e:I[97367,["$2"],"OutletBoundary"]
+f:["$","li",null,{"children":"The discount fee is interest on the advance for the days it is outstanding. The quoted fee is the maximum. If your buyer pays early, you pay less."}]
+10:["$","li",null,{"children":"The verification fee is fixed per invoice."}]
+11:["$","li",null,{"children":"Payments are applied in this order: the advance, then fees, then interest."}]
+12:["$","li",null,{"children":"If your buyer has not paid 30 days after the due date, Mapema may ask you to repay the advance (recourse)."}]
+13:["$","li",null,{"children":"Mapema charges no late fees in this version of the service."}]
+14:["$","$L1e",null,{"children":["$","$1a",null,{"name":"Next.MetadataOutlet","children":"$@1f"}]}]
+8:300
+1f:null
+1d:true
+8:C
+1c:0
+d:"$undefined"
+a:"$undefined"
+7:"$undefined"
+1b:"$undefined"
+15:"$undefined"
