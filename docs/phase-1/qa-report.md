@@ -23,7 +23,7 @@
 | `npm run test:fineract` (Fineract adapter proof) | ✅ **6 / 6 passed** against real Fineract | 1.3 s |
 | `npm run test:e2e:fineract` (API E2E on real Fineract) | ✅ **50 / 50 passed** | 7.2 s |
 | `npm audit` (all deps, incl. dev) | ✅ **0 vulnerabilities** (after upgrading zod to 4.6.7 and vitest to 5.1.0) | — |
-| `scripts/ui-smoke.mjs` (browser) | ✅ 12 / 12 checks (results below) | 5 s |
+| `scripts/ui-smoke.mjs` (browser, re-run 11:55 GMT on the final build) | ✅ 13 / 13 checks (results below) | 9 s |
 | Built API + worker smoke | ✅ API `/v1/public/health` 200 with all 8 adapters listed; worker started and took the job lock; seed built the demo world through the running API | — |
 
 ### `npm test` breakdown (103)
@@ -87,7 +87,7 @@ These cover: forged, missing and single-factor tokens rejected; SMS factor only 
 | Credit officer approves | ✅ "Approved" |
 | Ops: release checks all green, release | ✅ "Released" |
 | Auditor: portfolio lists the advance; audit chain intact (42 events) | ✅ |
-| Buyer: six tabs incl. maker-checker confirm; calendar shows the pay-to virtual account | ✅ |
+| Buyer: seven tabs incl. maker-checker confirm and Users; calendar shows the pay-to virtual account | ✅ |
 | Console errors | 1: a 404 for `/favicon.ico` (cosmetic) |
 
 ## Defects found and fixed during Phase 1 QA
