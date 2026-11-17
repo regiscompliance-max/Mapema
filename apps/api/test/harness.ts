@@ -30,6 +30,7 @@ export interface Harness {
   close: () => Promise<void>;
   dbName: string;
   appUrl: string; // the API's own (least-privilege) connection string
+  env: Record<string, string>; // the config used, so a test can start a second API instance on the same DB
 }
 
 function url(base: string, db: string, user?: string, pw?: string) {
@@ -76,7 +77,7 @@ export async function startHarness(extraEnv: Record<string, string> = {}): Promi
     staff[name] = { id: u.id, sub, token: () => token(sub, { email: `${name}@mapema.test` }) };
   }
   return {
-    app, http: request(app.getHttpServer()), admin, adapters, clock, token, staff, dbName, appUrl: env.DATABASE_URL,
+    app, http: request(app.getHttpServer()), admin, adapters, clock, token, staff, dbName, appUrl: env.DATABASE_URL, env,
     close: async () => {
       await app.close();
       await admin.end();
