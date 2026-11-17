@@ -1,7 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { API_URL } from '@/lib/api';
-import { getSession } from '@/lib/session';
+import { download } from '@/lib/api';
 import { useT } from '../lang';
 import { Table, Tabs, useGet } from '../ui';
 
@@ -13,9 +12,7 @@ export function AuditorPortal() {
   const tb = useGet<any>(tab === 'tb' ? '/ledger/trial-balance' : null);
   const verify = useGet<any>(tab === 'audit' ? '/audit/verify' : null);
   async function exportCsv() {
-    const r = await fetch(`${API_URL}/v1/audit/export`, { headers: { Authorization: `Bearer ${getSession()?.accessToken}` } });
-    const url = URL.createObjectURL(await r.blob());
-    const a = document.createElement('a'); a.href = url; a.download = 'mapema-audit-export.csv'; a.click(); URL.revokeObjectURL(url);
+    await download('/audit/export', 'mapema-audit-export.csv');
   }
   return (
     <div>

@@ -40,9 +40,22 @@ export async function signOut() {
   try { await api('/auth/logout', { body: {} }); } finally { setCsrf(null); }
 }
 
+async function devIdpToken(email: string, factor: 'otp' | 'sms') {
+  return (await api<{ accessToken: string }>('/dev-idp/token', { body: { email, factor } })).accessToken;
+}
+
 export async function devSignIn(email: string, factor: 'otp' | 'sms') {
-  const r = await api<{ accessToken: string }>('/dev-idp/token', { body: { email, factor } });
-  return exchange(r.accessToken);
+  return exchange(await devIdpToken(email, factor));
+}
+
+export interface JoinDetails { token: string; displayName: string; phone?: string }
+async function acceptAndSignIn(accessToken: string, join: JoinDetails) {
+  await api('/invitations/accept', { body: { ...join, accessToken } });
+  return exchange(accessToken);
+}
+/** Invitation (development): sign in with the dev IdP, accept, then start the cookie session. */
+export async function devJoin(email: string, factor: 'otp' | 'sms', join: JoinDetails) {
+  return acceptAndSignIn(await devIdpToken(email, factor), join);
 }
 
 function b64url(buf: ArrayBuffer | Uint8Array) {
@@ -50,14 +63,14 @@ function b64url(buf: ArrayBuffer | Uint8Array) {
 }
 
 /** Start OIDC code + PKCE. NOT exercised yet (Keycloak was not run on the build box). */
-export async function oidcSignIn(opts: { stepUp?: boolean } = {}) {
+export async function oidcSignIn(opts: { stepUp?: boolean; join?: JoinDetails } = {}) {
   const issuer = process.env.NEXT_PUBLIC_OIDC_ISSUER!;
   const clientId = process.env.NEXT_PUBLIC_OIDC_CLIENT_ID ?? 'mapema-web';
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
   const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
   const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
   // one-time PKCE values for the redirect round-trip (not a credential; removed on return)
-  sessionStorage.setItem('mapema.pkce', JSON.stringify({ verifier, state }));
+  sessionStorage.setItem('mapema.pkce', JSON.stringify({ verifier, state, join: opts.join }));
   const p = new URLSearchParams({ client_id: clientId, response_type: 'code', scope: 'openid email', redirect_uri: `${location.origin}/signin/callback`, state, code_challenge: challenge, code_challenge_method: 'S256' });
   if (opts.stepUp) { p.set('max_age', '0'); p.set('acr_values', 'mfa'); }
   location.assign(`${issuer}/protocol/openid-connect/auth?${p}`);
@@ -72,5 +85,6 @@ export async function oidcCallback(params: URLSearchParams) {
     body: new URLSearchParams({ grant_type: 'authorization_code', code: params.get('code') ?? '', redirect_uri: `${location.origin}/signin/callback`, client_id: process.env.NEXT_PUBLIC_OIDC_CLIENT_ID ?? 'mapema-web', code_verifier: saved.verifier }) });
   if (!res.ok) throw new Error('Sign-in failed');
   const t = await res.json();
-  return exchange(t.access_token); // token goes straight to the API and is then dropped
+  // the token goes straight to the API and is then dropped
+  return saved.join ? acceptAndSignIn(t.access_token, saved.join) : exchange(t.access_token);
 }

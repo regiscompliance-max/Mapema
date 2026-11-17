@@ -18,7 +18,7 @@ function mockFetch(responder: (url: string, init: RequestInit) => { status: numb
   globalThis.fetch = vi.fn(async (url: any, init: any = {}) => {
     calls.push({ url: String(url), init });
     const r = responder(String(url), init);
-    return new Response(r.body === undefined ? '' : JSON.stringify(r.body), { status: r.status, headers: { 'Content-Type': 'application/json' } });
+    return new Response(r.body === undefined ? null : JSON.stringify(r.body), { status: r.status, headers: { 'Content-Type': 'application/json' } });
   }) as any;
 }
 const hdr = (c: Call, k: string) => new Headers(c.init.headers as any).get(k);

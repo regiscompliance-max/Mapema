@@ -1,19 +1,16 @@
 'use client';
 import { ReactNode, useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '@/lib/api';
-import { getSession } from '@/lib/session';
 import { kesFromCents } from '@/lib/money';
 import { useT } from './lang';
 
-export function useToken() { return getSession()?.accessToken ?? null; }
-
-/** GET with the session token; returns data, error, reload. */
+/** GET with the session cookie; returns data, error, reload. */
 export function useGet<T = any>(path: string | null) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const load = useCallback(async () => {
     if (!path) return;
-    try { setError(null); setData(await api<T>(path, { token: getSession()?.accessToken })); } catch (e) { setError(e as ApiError); }
+    try { setError(null); setData(await api<T>(path)); } catch (e) { setError(e as ApiError); }
   }, [path]);
   useEffect(() => { void load(); }, [load]);
   return { data, error, reload: load };
@@ -23,9 +20,9 @@ export function useGet<T = any>(path: string | null) {
 export function useAction() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const run = async (fn: (token: string | null) => Promise<unknown>, okText = 'Done') => {
+  const run = async (fn: () => Promise<unknown>, okText = 'Done') => {
     setBusy(true); setMsg(null);
-    try { await fn(getSession()?.accessToken ?? null); setMsg({ ok: true, text: okText }); return true; } catch (e) {
+    try { await fn(); setMsg({ ok: true, text: okText }); return true; } catch (e) {
       const x = e as ApiError;
       const checks = x.body?.failedChecks?.map((c: any) => `${c.code}: ${c.detail}`).join('; ');
       setMsg({ ok: false, text: `${x.code}: ${x.message}${checks ? ` (${checks})` : ''}${x.code === 'STEP_UP_REQUIRED' ? ' - sign in again to confirm.' : ''}` });

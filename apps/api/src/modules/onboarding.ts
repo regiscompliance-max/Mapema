@@ -589,9 +589,13 @@ export class OnboardingController {
   @Public()
   @Post('invitations/accept')
   accept(@Headers('authorization') auth: string | undefined, @Body() b: unknown) {
-    const body = z.object({ token: z.string().min(20).max(200), displayName: zText(200), phone: zPhoneKe.optional() }).parse(b);
-    if (!auth?.startsWith('Bearer ')) throw new DomainError(401, 'UNAUTHENTICATED', 'Sign in first');
-    return this.s.acceptInvitation(auth.slice(7), this.verifier, body);
+    // the invitee has no Mapema account yet, so no session: the fresh IdP token comes in the header (API
+    // clients) or the body (browser, Phase 1b - never stored), and the browser then swaps it for a cookie session
+    const body = z.object({ token: z.string().min(20).max(200), displayName: zText(200), phone: zPhoneKe.optional(), accessToken: z.string().min(1).max(8000).optional() }).parse(b);
+    const idToken = auth?.startsWith('Bearer ') ? auth.slice(7) : body.accessToken;
+    if (!idToken) throw new DomainError(401, 'UNAUTHENTICATED', 'Sign in first');
+    const { accessToken: _drop, ...rest } = body;
+    return this.s.acceptInvitation(idToken, this.verifier, rest);
   }
 
   @Post('consents')
