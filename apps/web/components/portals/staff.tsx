@@ -38,7 +38,7 @@ function Dashboard() {
 function Approvals() {
   const { data, reload } = useGet<any[]>('/approvals');
   const { busy, msg, run } = useAction();
-  const act = (id: string, a: 'approve' | 'reject') => run((tok) => api(`/approvals/${id}/${a}`, { token: tok, body: { reason: a === 'reject' ? prompt('Reason') ?? 'rejected' : 'checked' } }), a).then(reload);
+  const act = (id: string, a: 'approve' | 'reject') => run(() => api(`/approvals/${id}/${a}`, { body: { reason: a === 'reject' ? prompt('Reason') ?? 'rejected' : 'checked' } }), a).then(reload);
   return (<><Msg msg={msg} /><Table rows={data} cols={[{ key: 'action', label: 'Action' }, { key: 'maker_name', label: 'Proposed by' }, { key: 'maker_reason', label: 'Reason' }, { key: 'required_role', label: 'Needs' },
     { key: 'payload', label: 'Change', render: (r) => <code className="text-xs">{JSON.stringify(r.payload)}</code> },
     { key: 'x', label: '', render: (r) => <span className="flex gap-2"><button className="btn !min-h-10 !py-2" disabled={busy} onClick={() => act(r.id, 'approve')}>Approve</button><button className="btn-secondary !min-h-10 !py-2" onClick={() => act(r.id, 'reject')}>Reject</button></span> }]} /></>);
@@ -54,11 +54,11 @@ function Advances({ canCredit, canOps }: { canCredit: boolean; canOps: boolean }
     <div className="space-y-6"><Msg msg={msg} />
       <h2 className="h2">Requested (credit decision)</h2>
       <Table rows={requested.data} cols={[{ key: 'invoice_number', label: 'Invoice' }, { key: 'supplier_name', label: 'Supplier' }, { key: 'buyer_name', label: 'Buyer' }, { key: 'principal_cents', label: 'Advance', money: true }, { key: 'c', label: 'Checks', render: checks },
-        { key: 'x', label: '', render: (r) => canCredit ? <span className="flex gap-2"><button className="btn !min-h-10 !py-2" disabled={busy} onClick={() => run((tok) => api(`/advances/${r.id}/decision`, { token: tok, body: { decision: 'approve', reason: 'Checks green' } }), 'Approved').then(reload)}>Approve</button>
-          <button className="btn-secondary !min-h-10 !py-2" onClick={() => run((tok) => api(`/advances/${r.id}/decision`, { token: tok, body: { decision: 'decline', reason: prompt('Reason') ?? 'declined' } }), 'Declined').then(reload)}>Decline</button></span> : null }]} />
+        { key: 'x', label: '', render: (r) => canCredit ? <span className="flex gap-2"><button className="btn !min-h-10 !py-2" disabled={busy} onClick={() => run(() => api(`/advances/${r.id}/decision`, { body: { decision: 'approve', reason: 'Checks green' } }), 'Approved').then(reload)}>Approve</button>
+          <button className="btn-secondary !min-h-10 !py-2" onClick={() => run(() => api(`/advances/${r.id}/decision`, { body: { decision: 'decline', reason: prompt('Reason') ?? 'declined' } }), 'Declined').then(reload)}>Decline</button></span> : null }]} />
       <h2 className="h2">Approved (ops release - a different person)</h2>
       <Table rows={approved.data} cols={[{ key: 'invoice_number', label: 'Invoice' }, { key: 'supplier_name', label: 'Supplier' }, { key: 'principal_cents', label: 'Advance', money: true }, { key: 'c', label: 'Checks now', render: checks },
-        { key: 'x', label: '', render: (r) => canOps ? <button className="btn !min-h-10 !py-2" disabled={busy} onClick={() => run((tok) => api(`/advances/${r.id}/release`, { token: tok, idempotencyKey: newIdempotencyKey(), body: {} }), 'Released').then(reload)}>Release payment</button> : null }]} />
+        { key: 'x', label: '', render: (r) => canOps ? <button className="btn !min-h-10 !py-2" disabled={busy} onClick={() => run(() => api(`/advances/${r.id}/release`, { idempotencyKey: newIdempotencyKey(), body: {} }), 'Released').then(reload)}>Release payment</button> : null }]} />
     </div>
   );
 }
@@ -71,10 +71,10 @@ function Payments() {
     <div className="space-y-6"><Msg msg={msg} />
       <h2 className="h2">Supplier balances to release today</h2>
       <Table rows={payouts.data} cols={[{ key: 'invoice_number', label: 'Invoice' }, { key: 'supplier_name', label: 'Supplier' }, { key: 'amount_cents', label: 'Balance', money: true },
-        { key: 'x', label: '', render: (r) => <button className="btn !min-h-10 !py-2" disabled={busy} onClick={() => run((tok) => api(`/payouts/${r.id}/release`, { token: tok, body: {} }), 'Balance sent').then(payouts.reload)}>Release</button> }]} />
+        { key: 'x', label: '', render: (r) => <button className="btn !min-h-10 !py-2" disabled={busy} onClick={() => run(() => api(`/payouts/${r.id}/release`, { body: {} }), 'Balance sent').then(payouts.reload)}>Release</button> }]} />
       <h2 className="h2">Unmatched receipts</h2>
       <Table rows={unmatched.data} cols={[{ key: 'bank_ref', label: 'Bank ref' }, { key: 'payer_name', label: 'Payer' }, { key: 'narrative', label: 'Narrative' }, { key: 'amount_cents', label: 'Amount', money: true },
-        { key: 'x', label: '', render: (r) => <button className="underline" onClick={() => { const adv = prompt('Advance id to match'); if (adv) void run((tok) => api(`/payments/${r.id}/match`, { token: tok, body: { advanceId: adv, reason: prompt('Evidence') ?? 'manual' } }), 'Match proposed - a second ops user must approve'); }}>Match…</button> }]} />
+        { key: 'x', label: '', render: (r) => <button className="underline" onClick={() => { const adv = prompt('Advance id to match'); if (adv) void run(() => api(`/payments/${r.id}/match`, { body: { advanceId: adv, reason: prompt('Evidence') ?? 'manual' } }), 'Match proposed - a second ops user must approve'); }}>Match…</button> }]} />
     </div>
   );
 }
@@ -82,14 +82,14 @@ function Payments() {
 function Recon() {
   const { data, reload } = useGet<any[]>('/reconciliation/runs');
   const { busy, msg, run } = useAction();
-  return (<div className="space-y-4"><button className="btn" disabled={busy} onClick={() => run((tok) => api('/reconciliation/run', { token: tok, body: {} }), 'Reconciliation run').then(reload)}>Run reconciliation now</button><Msg msg={msg} />
+  return (<div className="space-y-4"><button className="btn" disabled={busy} onClick={() => run(() => api('/reconciliation/run', { body: {} }), 'Reconciliation run').then(reload)}>Run reconciliation now</button><Msg msg={msg} />
     <Table rows={data} cols={[{ key: 'as_of_date', label: 'Date', render: (r) => String(r.as_of_date).slice(0, 10) }, { key: 'bank_balance_cents', label: 'Bank', money: true }, { key: 'fineract_cash_cents', label: 'Ledger', money: true }, { key: 'platform_cash_cents', label: 'Platform', money: true }, { key: 'status', label: 'Status', render: (r) => <StatusPill s={r.status} /> }, { key: 'open_breaks', label: 'Open breaks' }]} /></div>);
 }
 
 function Orgs() {
   const { data, reload } = useGet<any[]>('/organisations');
   const { busy, msg, run } = useAction();
-  const create = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)); void run((tok) => api('/organisations', { token: tok, body: { type: 'buyer', ...f } }), 'Buyer prospect created').then(reload); };
+  const create = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)); void run(() => api('/organisations', { body: { type: 'buyer', ...f } }), 'Buyer prospect created').then(reload); };
   return (
     <div className="space-y-4">
       <form onSubmit={create} className="card grid gap-3 sm:grid-cols-2"><h3 className="h2 sm:col-span-2">New buyer prospect</h3>
@@ -99,12 +99,12 @@ function Orgs() {
       <Msg msg={msg} />
       <Table rows={data} cols={[{ key: 'legal_name', label: 'Name' }, { key: 'type', label: 'Type' }, { key: 'kra_pin', label: 'KRA PIN' }, { key: 'sector_code', label: 'Sector' }, { key: 'status', label: 'Status', render: (r) => <StatusPill s={r.status} /> },
         { key: 'x', label: '', render: (r) => r.type === 'buyer'
-          ? <button className="underline" onClick={() => run((tok) => api(`/organisations/${r.id}/crb-pull`, { token: tok, body: {} }), 'CRB report pulled')}>Pull CRB</button>
-          : <button className="underline" onClick={() => run(async (tok) => {
-              const org = await api<any>(`/organisations/${r.id}`, { token: tok });
+          ? <button className="underline" onClick={() => run(() => api(`/organisations/${r.id}/crb-pull`, { body: {} }), 'CRB report pulled')}>Pull CRB</button>
+          : <button className="underline" onClick={() => run(async () => {
+              const org = await api<any>(`/organisations/${r.id}`);
               const kes = prompt(`Supplier limit in KES for ${org.supplierLinks[0]?.buyer_name}`); if (!kes) throw Object.assign(new Error('cancelled'), { code: 'CANCELLED' });
               const cents = parseKesInput(kes); if (cents === null) throw Object.assign(new Error('not a KES amount'), { code: 'BAD_AMOUNT' });
-              await api(`/supplier-links/${org.supplierLinks[0].id}/limit`, { token: tok, body: { limitCents: cents.toString(), reason: prompt('Reason') ?? 'credit review' } });
+              await api(`/supplier-links/${org.supplierLinks[0].id}/limit`, { body: { limitCents: cents.toString(), reason: prompt('Reason') ?? 'credit review' } });
             }, 'Limit proposed - a second credit officer must approve')}>Set limit…</button> }]} />
     </div>
   );
@@ -128,8 +128,8 @@ function Settings() {
       <div className="card space-y-2">
         <p>Lending: <strong>{data.lending.enabled ? `ON - CBK licence ${data.lending.cbk_licence_no}` : 'OFF'}</strong></p>
         {data.lending.enabled
-          ? <button className="btn" disabled={busy} onClick={() => run((tok) => api('/admin/lending/disable', { token: tok, body: { reason: prompt('Reason') ?? 'manual stop' } }), 'Lending switched off').then(reload)}>Switch lending OFF now</button>
-          : <button className="btn" disabled={busy} onClick={() => { const n = prompt('CBK licence number'); if (n) void run((tok) => api('/admin/lending/enable', { token: tok, body: { cbkLicenceNo: n } }), 'Proposed - the CEO must approve'); }}>Propose switching lending ON</button>}
+          ? <button className="btn" disabled={busy} onClick={() => run(() => api('/admin/lending/disable', { body: { reason: prompt('Reason') ?? 'manual stop' } }), 'Lending switched off').then(reload)}>Switch lending OFF now</button>
+          : <button className="btn" disabled={busy} onClick={() => { const n = prompt('CBK licence number'); if (n) void run(() => api('/admin/lending/enable', { body: { cbkLicenceNo: n } }), 'Proposed - the CEO must approve'); }}>Propose switching lending ON</button>}
       </div>
       <Msg msg={msg} />
       <p>Float: {kesFromCents(data.floatCents)} · Minimum invoice: {kesFromCents(data.invoiceMinimumCents)} · Environment: {data.environment}</p>

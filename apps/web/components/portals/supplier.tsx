@@ -37,7 +37,7 @@ function Invoices() {
       <p className="text-xs text-slate-500">Terms {offer.termsVersion} · Key information {offer.kidVersion} · Offer valid until {new Date(offer.expiresAt).toLocaleTimeString()}</p>
       <label className="flex gap-2"><input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> {t('supplier.accept')}</label>
       <div className="flex gap-3">
-        <button className="btn" disabled={!agree || busy} onClick={async () => { if (await run((tok) => api('/advances', { token: tok, idempotencyKey: newIdempotencyKey(), body: { disclosureIds: [offer.disclosureId], acceptTerms: true } }), 'Requested. We will notify you when the money is sent.')) { setOffer(null); void reload(); } }}>{t('supplier.confirm')}</button>
+        <button className="btn" disabled={!agree || busy} onClick={async () => { if (await run(() => api('/advances', { idempotencyKey: newIdempotencyKey(), body: { disclosureIds: [offer.disclosureId], acceptTerms: true } }), 'Requested. We will notify you when the money is sent.')) { setOffer(null); void reload(); } }}>{t('supplier.confirm')}</button>
         <button className="btn-secondary" onClick={() => setOffer(null)}>Back</button>
       </div>
       <Msg msg={msg} />
@@ -49,7 +49,7 @@ function Invoices() {
       <Table rows={data} cols={[
         { key: 'invoice_number', label: 'Invoice' }, { key: 'buyer_name', label: 'Buyer' }, { key: 'amount_cents', label: 'Amount', money: true }, { key: 'due_date', label: 'Due' },
         { key: 'status', label: 'Status', render: (r) => <StatusPill s={r.status} /> },
-        { key: 'act', label: '', render: (r) => r.status === 'eligible' ? <button className="btn !min-h-10 !py-2" onClick={() => run(async (tok) => setOffer(await api(`/invoices/${r.id}/quote`, { token: tok, body: {} })), '')}>{t('supplier.getPaid')}</button> : null },
+        { key: 'act', label: '', render: (r) => r.status === 'eligible' ? <button className="btn !min-h-10 !py-2" onClick={() => run(async () => setOffer(await api(`/invoices/${r.id}/quote`, { body: {} })), '')}>{t('supplier.getPaid')}</button> : null },
       ]} />
     </>
   );
@@ -63,8 +63,8 @@ function Advances() {
 function Account({ orgId }: { orgId: string }) {
   const { data: org, reload } = useGet<any>(`/organisations/${orgId}`);
   const { busy, msg, run } = useAction();
-  const person = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)); void run((tok) => api(`/organisations/${orgId}/persons`, { token: tok, body: { fullName: f.fullName, nationalId: f.nationalId, email: f.email || undefined, phone: f.phone || undefined, isDirector: true, isAuthorisedSignatory: true } }), 'Director added').then(reload); };
-  const bank = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)); void run((tok) => api(`/organisations/${orgId}/bank-accounts`, { token: tok, body: f }), 'Bank account saved. Our team will call to verify it.').then(reload); };
+  const person = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)); void run(() => api(`/organisations/${orgId}/persons`, { body: { fullName: f.fullName, nationalId: f.nationalId, email: f.email || undefined, phone: f.phone || undefined, isDirector: true, isAuthorisedSignatory: true } }), 'Director added').then(reload); };
+  const bank = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)); void run(() => api(`/organisations/${orgId}/bank-accounts`, { body: f }), 'Bank account saved. Our team will call to verify it.').then(reload); };
   return (
     <div className="space-y-6">
       <p>Status: <StatusPill s={org?.status ?? '…'} /></p>
@@ -81,8 +81,8 @@ function Account({ orgId }: { orgId: string }) {
         <button className="btn sm:col-span-2" disabled={busy}>Save</button>
       </form>
       <div className="flex flex-col gap-3 sm:flex-row">
-        <button className="btn" disabled={busy} onClick={() => run((tok) => api(`/organisations/${orgId}/submit`, { token: tok, body: {} }), 'Submitted for verification').then(reload)}>Submit for verification</button>
-        <button className="btn-secondary" disabled={busy} onClick={() => run((tok) => api(`/organisations/${orgId}/agreements`, { token: tok, body: {} }), 'Agreement sent for e-signature')}>Sign master agreement</button>
+        <button className="btn" disabled={busy} onClick={() => run(() => api(`/organisations/${orgId}/submit`, { body: {} }), 'Submitted for verification').then(reload)}>Submit for verification</button>
+        <button className="btn-secondary" disabled={busy} onClick={() => run(() => api(`/organisations/${orgId}/agreements`, { body: {} }), 'Agreement sent for e-signature')}>Sign master agreement</button>
       </div>
       <Msg msg={msg} />
     </div>
@@ -92,7 +92,7 @@ function Account({ orgId }: { orgId: string }) {
 export function Complaints() {
   const { data, reload } = useGet<any[]>('/complaints');
   const { busy, msg, run } = useAction();
-  const submit = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)); void run((tok) => api('/complaints', { token: tok, body: f }), 'Complaint received').then(reload); };
+  const submit = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)); void run(() => api('/complaints', { body: f }), 'Complaint received').then(reload); };
   return (
     <div className="space-y-4">
       <form onSubmit={submit} className="card space-y-3">

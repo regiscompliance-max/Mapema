@@ -19,7 +19,13 @@ const D0 = WORKED.quoteDate;
 async function inviteSupplier(pin: string, name: string, email: string) {
   const si = await w.buyerAdmin.post('/invitations', { kind: 'supplier', email, supplier: { legalName: name, kraPin: pin, registrationNo: `PVT-${pin.slice(-4)}` } });
   const tok = () => h.token(`sup:${pin}`, { email, amr: ['pwd', 'sms'] });
-  await h.http.post('/v1/invitations/accept').set('Authorization', `Bearer ${await tok()}`).send({ token: si.devToken, displayName: name }).expect(201);
+  // Phase 1b web flow: the browser sends the fresh IdP token in the body (no Authorization header, nothing stored),
+  // then swaps the same token for a cookie session
+  const idTok = await tok();
+  await h.http.post('/v1/invitations/accept').send({ token: si.devToken, displayName: name, accessToken: idTok }).expect(201);
+  const sess = await h.http.post('/v1/auth/session').set('Origin', 'http://localhost:3000').send({ accessToken: idTok });
+  expect(sess.status).toBe(201);
+  expect(String(sess.headers['set-cookie'])).toMatch(/mapema_sid=.*HttpOnly/);
   return { id: si.orgId as string, c: client(h, tok) };
 }
 

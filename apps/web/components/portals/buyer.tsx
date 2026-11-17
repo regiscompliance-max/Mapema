@@ -28,7 +28,7 @@ export function BuyerPortal({ roles, orgId }: { roles: string[]; orgId: string }
 function AllInvoices() {
   const { data, reload } = useGet<any[]>('/invoices');
   const { msg, run } = useAction();
-  const dispute = (id: string) => run((tok) => api('/disputes', { token: tok, body: { invoiceId: id, reasonCode: 'other', description: prompt('Describe the problem') ?? '' } }), 'Dispute raised').then(reload);
+  const dispute = (id: string) => run(() => api('/disputes', { body: { invoiceId: id, reasonCode: 'other', description: prompt('Describe the problem') ?? '' } }), 'Dispute raised').then(reload);
   return (<><Msg msg={msg} />
     <Table rows={data} cols={[{ key: 'invoice_number', label: 'Invoice' }, { key: 'supplier_name', label: 'Supplier' }, { key: 'amount_cents', label: 'Amount', money: true }, { key: 'due_date', label: 'Due' },
       { key: 'etims_status', label: 'eTIMS' }, { key: 'status', label: 'Status', render: (r) => <StatusPill s={r.status} /> },
@@ -41,9 +41,9 @@ function NewInvoice() {
     e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
     const cents = parseKesInput(f.amount);
     if (cents === null) return;
-    void run((tok) => api('/invoices', { token: tok, body: { supplierKraPin: f.pin, invoiceNumber: f.number, amountCents: cents.toString(), currency: 'KES', issueDate: f.issue, dueDate: f.due, etimsCuInvoiceNo: f.cu || undefined } }), 'Invoice added. A second person must now confirm it.');
+    void run(() => api('/invoices', { body: { supplierKraPin: f.pin, invoiceNumber: f.number, amountCents: cents.toString(), currency: 'KES', issueDate: f.issue, dueDate: f.due, etimsCuInvoiceNo: f.cu || undefined } }), 'Invoice added. A second person must now confirm it.');
   };
-  const csv = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const file = (e.currentTarget.elements.namedItem('file') as HTMLInputElement).files?.[0]; if (file) void file.text().then((text) => run((tok) => api('/invoices/csv', { token: tok, body: { csv: text } }), 'CSV processed')); };
+  const csv = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const file = (e.currentTarget.elements.namedItem('file') as HTMLInputElement).files?.[0]; if (file) void file.text().then((text) => run(() => api('/invoices/csv', { body: { csv: text } }), 'CSV processed')); };
   return (
     <div className="space-y-6">
       <form onSubmit={submit} className="card grid gap-3 sm:grid-cols-2">
@@ -66,7 +66,7 @@ function Confirm() {
   const confirmed = useGet<any[]>('/invoices?status=confirmed');
   const [sel, setSel] = useState<string[]>([]);
   const { busy, msg, run } = useAction();
-  const decide = (id: string, decision: string) => run((tok) => api(`/invoices/${id}/decision`, { token: tok, body: decision === 'reject' ? { decision, reasonCode: 'not_recognised', reasonText: prompt('Why are you rejecting this invoice?') ?? undefined } : { decision } }), decision).then(() => { void pending.reload(); void confirmed.reload(); });
+  const decide = (id: string, decision: string) => run(() => api(`/invoices/${id}/decision`, { body: decision === 'reject' ? { decision, reasonCode: 'not_recognised', reasonText: prompt('Why are you rejecting this invoice?') ?? undefined } : { decision } }), decision).then(() => { void pending.reload(); void confirmed.reload(); });
   return (
     <div className="space-y-6">
       <Msg msg={msg} />
@@ -76,7 +76,7 @@ function Confirm() {
       <h2 className="h2">Confirmed - sign the undertaking to pay (ILU)</h2>
       <Table rows={confirmed.data} cols={[{ key: 's', label: '', render: (r) => <input type="checkbox" aria-label={`select ${r.invoice_number}`} checked={sel.includes(r.id)} onChange={(e) => setSel(e.target.checked ? [...sel, r.id] : sel.filter((x) => x !== r.id))} /> },
         { key: 'invoice_number', label: 'Invoice' }, { key: 'amount_cents', label: 'Amount', money: true }, { key: 'due_date', label: 'Due' }]} />
-      <button className="btn" disabled={!sel.length || busy} onClick={() => run((tok) => api('/confirmations', { token: tok, body: { invoiceIds: sel } }), 'Undertaking sent for e-signature').then(() => setSel([]))}>{t('buyer.sign')}</button>
+      <button className="btn" disabled={!sel.length || busy} onClick={() => run(() => api('/confirmations', { body: { invoiceIds: sel } }), 'Undertaking sent for e-signature').then(() => setSel([]))}>{t('buyer.sign')}</button>
     </div>
   );
 }
@@ -94,7 +94,7 @@ function Calendar() {
 function Invite() {
   const { busy, msg, run } = useAction();
   const submit = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
-    void run((tok) => api('/invitations', { token: tok, body: { kind: 'supplier', email: f.email, phone: f.phone || undefined, supplier: { legalName: f.name, kraPin: f.pin, registrationNo: f.reg } } }), 'Invitation sent'); };
+    void run(() => api('/invitations', { body: { kind: 'supplier', email: f.email, phone: f.phone || undefined, supplier: { legalName: f.name, kraPin: f.pin, registrationNo: f.reg } } }), 'Invitation sent'); };
   return (
     <form onSubmit={submit} className="card grid gap-3 sm:grid-cols-2">
       <input name="name" required placeholder="Supplier legal name" className="input" /><input name="pin" required placeholder="KRA PIN" className="input" />
@@ -109,7 +109,7 @@ function Invite() {
 function Users({ orgId }: { orgId: string }) {
   const { busy, msg, run } = useAction();
   const submit = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
-    void run((tok) => api('/invitations', { token: tok, body: { kind: 'buyer_user', orgId, email: f.email, role: f.role } }), 'Invitation sent'); };
+    void run(() => api('/invitations', { body: { kind: 'buyer_user', orgId, email: f.email, role: f.role } }), 'Invitation sent'); };
   return (
     <form onSubmit={submit} className="card grid gap-3 sm:grid-cols-2">
       <input name="email" type="email" required placeholder="Colleague's work email" className="input" />
