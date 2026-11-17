@@ -81,8 +81,13 @@ function Confirm() {
 }
 
 function Calendar() {
-  const { data } = useGet<any[]>('/buyer/payment-calendar');
-  return <Table rows={data} cols={[{ key: 'due_date', label: 'Due' }, { key: 'invoice_number', label: 'Invoice' }, { key: 'amount_cents', label: 'Pay', money: true }, { key: 'pay_to', label: 'Pay to account' }]} />;
+  const { data } = useGet<{ payTo: { bankCode: string; accountNumber: string; reference: string } | null; due: any[] }>('/buyer/payment-calendar');
+  return (
+    <div className="space-y-4">
+      {data?.payTo && <div className="card"><p className="font-semibold">Pay financed invoices to</p><p>Bank {data.payTo.bankCode} · Account <span className="font-mono">{data.payTo.accountNumber}</span></p><p className="text-sm text-slate-600">{data.payTo.reference}</p></div>}
+      <Table rows={data?.due ?? null} cols={[{ key: 'due_date', label: 'Due', render: (r) => String(r.due_date).slice(0, 10) }, { key: 'invoices', label: 'Invoices' }, { key: 'invoice_numbers', label: 'Numbers', render: (r) => r.invoice_numbers.join(', ') }, { key: 'amount_cents', label: 'Pay', money: true }]} />
+    </div>
+  );
 }
 
 function Invite() {

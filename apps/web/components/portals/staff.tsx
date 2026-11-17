@@ -1,7 +1,7 @@
 'use client';
 import { FormEvent, useState } from 'react';
 import { api, newIdempotencyKey } from '@/lib/api';
-import { kesFromCents } from '@/lib/money';
+import { kesFromCents, parseKesInput } from '@/lib/money';
 import { useT } from '../lang';
 import { Msg, StatusPill, Table, Tabs, useAction, useGet } from '../ui';
 
@@ -98,7 +98,14 @@ function Orgs() {
         <button className="btn sm:col-span-2" disabled={busy}>Create</button></form>
       <Msg msg={msg} />
       <Table rows={data} cols={[{ key: 'legal_name', label: 'Name' }, { key: 'type', label: 'Type' }, { key: 'kra_pin', label: 'KRA PIN' }, { key: 'sector_code', label: 'Sector' }, { key: 'status', label: 'Status', render: (r) => <StatusPill s={r.status} /> },
-        { key: 'x', label: '', render: (r) => r.type === 'buyer' ? <button className="underline" onClick={() => run((tok) => api(`/organisations/${r.id}/crb-pull`, { token: tok, body: {} }), 'CRB report pulled')}>Pull CRB</button> : null }]} />
+        { key: 'x', label: '', render: (r) => r.type === 'buyer'
+          ? <button className="underline" onClick={() => run((tok) => api(`/organisations/${r.id}/crb-pull`, { token: tok, body: {} }), 'CRB report pulled')}>Pull CRB</button>
+          : <button className="underline" onClick={() => run(async (tok) => {
+              const org = await api<any>(`/organisations/${r.id}`, { token: tok });
+              const kes = prompt(`Supplier limit in KES for ${org.supplierLinks[0]?.buyer_name}`); if (!kes) throw Object.assign(new Error('cancelled'), { code: 'CANCELLED' });
+              const cents = parseKesInput(kes); if (cents === null) throw Object.assign(new Error('not a KES amount'), { code: 'BAD_AMOUNT' });
+              await api(`/supplier-links/${org.supplierLinks[0].id}/limit`, { token: tok, body: { limitCents: cents.toString(), reason: prompt('Reason') ?? 'credit review' } });
+            }, 'Limit proposed - a second credit officer must approve')}>Set limit…</button> }]} />
     </div>
   );
 }
