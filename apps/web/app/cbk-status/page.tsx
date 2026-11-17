@@ -7,7 +7,7 @@ export default async function Page() {
     <>
       <PageHero eyebrow={t('footer.legal')} title={t('cbk.title')} />
       <Body narrow>
-        <p className="card border-l-4 border-l-brass text-lg leading-relaxed">{s.statement}</p>
+        <p className="card border-l-4 border-l-sun text-lg leading-relaxed">{s.statement}</p>
         <p className="mt-6 text-sm leading-relaxed text-muted">Central Bank of Kenya, Haile Selassie Avenue, Nairobi. You can check licensed non-deposit-taking credit providers on the CBK website.</p>
       </Body>
     </>

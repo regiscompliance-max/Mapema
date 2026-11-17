@@ -2,8 +2,8 @@ import { Body } from '@/components/page';
 export default function Page() {
   return (
     <Body narrow><article className="prose-legal space-y-4">
-      <p className="rounded-lg border border-brass/40 bg-ivory p-4 text-sm text-body">DRAFT summary of terms (MA-2026-11-v1). The signed Master Receivables Purchase Agreement and Deed of Assignment govern. Wording subject to Kenyan counsel review before launch.</p>
-      <h1 className="h1 text-navy">Terms in plain language</h1>
+      <p className="rounded-lg border border-sun/40 bg-sun-soft p-4 text-sm text-ink">DRAFT summary of terms (MA-2026-11-v1). The signed Master Receivables Purchase Agreement and Deed of Assignment govern. Wording subject to Kenyan counsel review before launch.</p>
+      <h1 className="h1">Terms in plain language</h1>
       <ul className="list-disc space-y-2 pl-6">
         <li>When you accept an offer, you assign the whole invoice to Mapema.</li>
         <li>Mapema pays you the advance shown in the offer. When your buyer pays, Mapema pays you the balance of the price within 1 business day.</li>

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Lang } from '@/lib/i18n';
 import { LangSwitch, T } from './lang';
 import { Wordmark } from './brand';
+import { DesktopNav, MobileMenu } from './nav-client';
 import { contactParams } from '@/lib/site-config';
 
 /** Static site: no API call. Lending stays off until a CBK licence number is entered in the platform. */
@@ -13,20 +14,16 @@ const tt = (k: string) => <T k={k} p={contactParams()} />;
 
 export function Header({ lang }: { lang: Lang }) {
   void lang;
-  const nav = 'text-[0.92rem] text-mist transition hover:text-white';
   return (
-    <header className="sticky top-0 z-30 border-b border-line-dark bg-ink/95 text-white backdrop-blur">
-      <nav className="container-x flex flex-wrap items-center gap-x-7 gap-y-1 py-3" aria-label="Main">
-        <Link href="/" className="mr-auto py-1" aria-label="Mapema home"><Wordmark /></Link>
-        <div className="order-3 flex w-full gap-6 overflow-x-auto pb-1 sm:order-none sm:w-auto sm:pb-0">
-          <Link href="/buyers" className={nav}>{tt('nav.buyers')}</Link>
-          <Link href="/suppliers" className={nav}>{tt('nav.suppliers')}</Link>
-          <Link href="/pricing" className={nav}>{tt('nav.pricing')}</Link>
-        </div>
-        <div className="flex items-center gap-4 [&_button]:text-mist [&_button]:decoration-brass/60 [&_button]:underline-offset-4 [&_button:hover]:text-white">
+    <header className="sticky top-0 z-30 border-b border-line bg-cream/95 backdrop-blur">
+      <nav className="container-x relative flex min-h-[4.5rem] items-center gap-4" aria-label="Main">
+        <Link href="/" className="mr-auto rounded-lg py-1" aria-label="Mapema home"><Wordmark /></Link>
+        <DesktopNav />
+        <div className="hidden items-center gap-3 md:flex [&_button]:min-h-11 [&_button]:px-2 [&_button]:font-semibold [&_button]:text-green">
           <LangSwitch />
-          <span className="rounded-full border border-brass/40 px-3.5 py-1.5 text-xs font-medium tracking-wide text-brass-soft" data-testid="portal-soon">{tt('nav.portalSoon')}</span>
+          <span className="rounded-full bg-sand px-3 py-1.5 text-sm font-semibold text-muted" data-testid="portal-soon">{tt('nav.portalSoon')}</span>
         </div>
+        <MobileMenu />
       </nav>
     </header>
   );
@@ -35,27 +32,26 @@ export function Header({ lang }: { lang: Lang }) {
 export async function Footer({ lang }: { lang: Lang }) {
   void lang;
   const s = await cbkStatus();
-  const link = 'text-mist transition hover:text-white';
+  const link = 'inline-flex min-h-11 items-center text-ink hover:text-green hover:underline';
   return (
-    <footer className="on-dark bg-ink text-white">
-      <div className="rule-brass" />
-      <div className="container-x grid gap-10 py-14 sm:grid-cols-12">
-        <div className="space-y-4 sm:col-span-5">
+    <footer className="border-t border-line bg-sand">
+      <div className="container-x grid gap-10 py-14 md:grid-cols-12">
+        <div className="space-y-4 md:col-span-5">
           <Wordmark />
-          <p className="max-w-sm text-sm leading-relaxed text-mist">{tt('home.lead')}</p>
+          <p className="max-w-sm text-muted">{tt('footer.tag')}</p>
         </div>
-        <nav className="sm:col-span-3" aria-label="Footer">
-          <p className="eyebrow mb-4">{tt('footer.company')}</p>
-          <ul className="space-y-2.5 text-sm">
-            <li><Link className={link} href="/buyers">{tt('nav.buyers')}</Link></li>
+        <nav className="md:col-span-3" aria-label="Footer">
+          <p className="mb-2 font-bold text-green">{tt('footer.company')}</p>
+          <ul>
             <li><Link className={link} href="/suppliers">{tt('nav.suppliers')}</Link></li>
+            <li><Link className={link} href="/buyers">{tt('nav.buyers')}</Link></li>
             <li><Link className={link} href="/pricing">{tt('nav.pricing')}</Link></li>
             <li><Link className={link} href="/book-a-call">{tt('nav.book')}</Link></li>
           </ul>
         </nav>
-        <nav className="sm:col-span-4" aria-label="Legal">
-          <p className="eyebrow mb-4">{tt('footer.legal')}</p>
-          <ul className="space-y-2.5 text-sm">
+        <nav className="md:col-span-4" aria-label="Legal">
+          <p className="mb-2 font-bold text-green">{tt('footer.legal')}</p>
+          <ul>
             <li><Link className={link} href="/complaints">{tt('footer.complaints')}</Link></li>
             <li><Link className={link} href="/legal/privacy">{tt('footer.privacy')}</Link></li>
             <li><Link className={link} href="/legal/terms">{tt('footer.terms')}</Link></li>
@@ -64,10 +60,13 @@ export async function Footer({ lang }: { lang: Lang }) {
           </ul>
         </nav>
       </div>
-      <div className="container-x space-y-4 border-t border-line-dark py-8 text-sm text-mist">
-        <p data-testid="cbk-statement" className="rounded-lg border border-line-dark bg-navy/60 p-4 leading-relaxed text-white/90">{s.statement}</p>
+      <div className="container-x space-y-4 border-t border-sand-2 py-8 text-[0.95rem] text-muted">
+        <p data-testid="cbk-statement" className="rounded-2xl border border-sand-2 bg-cream p-4 font-medium leading-relaxed text-ink">{s.statement}</p>
         <p data-testid="footer-contact" className="leading-relaxed">{tt('footer.contact')}</p>
-        <p className="text-xs text-mist/90">© {new Date().getFullYear()} Mapema Limited, Nairobi, Kenya.</p>
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+          <p>© {new Date().getFullYear()} Mapema Limited, Nairobi, Kenya.</p>
+          <span className="md:hidden [&_button]:min-h-11 [&_button]:font-semibold [&_button]:text-green"><LangSwitch /></span>
+        </div>
       </div>
     </footer>
   );

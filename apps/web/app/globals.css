@@ -1,64 +1,74 @@
 @import "tailwindcss";
 
 /* Self-hosted variable fonts (SIL OFL, licences in /fonts). No external requests: CSP stays 'self'. */
-@font-face { font-family: "Fraunces"; src: url("/fonts/fraunces-var.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
-@font-face { font-family: "Inter"; src: url("/fonts/inter-var.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Bricolage Grotesque"; src: url("/fonts/bricolage-var.woff2") format("woff2"); font-weight: 200 800; font-style: normal; font-display: swap; }
+@font-face { font-family: "Plus Jakarta Sans"; src: url("/fonts/jakarta-var.woff2") format("woff2"); font-weight: 200 800; font-style: normal; font-display: swap; }
 
+/* Palette "Sunrise ledger" - see docs/site/design-direction.md. Contrast ratios are against --color-cream. */
 @theme {
-  --color-ink: #0a1324;        /* near-black navy */
-  --color-navy: #0f1d36;
-  --color-navy-2: #16274a;
-  --color-line-dark: #26365a;  /* hairlines on navy */
-  --color-mist: #aab6cb;       /* body text on navy, 8.6:1 */
-  --color-brass: #c9a45c;      /* accent on navy, 7.9:1 */
-  --color-brass-soft: #e3cf9f;
-  --color-brass-ink: #7a5c22;  /* accent text on ivory, 5.6:1 */
-  --color-ivory: #f7f4ee;
-  --color-paper: #fbfaf7;
-  --color-line: #e4dfd3;       /* hairlines on light */
-  --color-body: #1c2433;
-  --color-muted: #4d5668;      /* 7:1 on ivory */
-  --color-emerald: #1f6f54;
-  --color-brand: #0f1d36;
-  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --color-cream: #fbf7f0;      /* page base */
+  --color-sand: #f3ebdd;       /* alternate section */
+  --color-sand-2: #eadfcc;
+  --color-line: #e5d9c5;       /* hairlines */
+  --color-ink: #1f2328;        /* text, 15:1 */
+  --color-muted: #57534e;      /* secondary text, 7.2:1 */
+  --color-green: #14532d;      /* primary, 9.6:1 */
+  --color-green-2: #166534;
+  --color-green-soft: #dcefe3;
+  --color-mint: #b7e4c7;
+  --color-sun: #f97316;        /* CTA background, with ink text 6.4:1 */
+  --color-sun-2: #fb8a3c;
+  --color-sun-soft: #ffe8d6;
+  --color-sun-ink: #a33a0f;    /* orange text, 6.5:1 on cream, 5.7:1 on sun-soft */
+  --color-brand: #14532d;
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Bricolage Grotesque", "Plus Jakarta Sans", system-ui, sans-serif;
 }
 
-html { -webkit-text-size-adjust: 100%; }
-body { @apply bg-paper text-body antialiased; font-family: var(--font-sans); font-feature-settings: "cv11", "ss01"; }
-:focus-visible { outline: 2px solid var(--color-brass); outline-offset: 3px; border-radius: 4px; }
-::selection { background: var(--color-brass-soft); color: var(--color-ink); }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; scroll-padding-top: 5rem; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { animation: none !important; transition: none !important; } }
+body { @apply bg-cream text-ink antialiased; font-family: var(--font-sans); font-size: 17px; line-height: 1.6; }
+:focus-visible { outline: 3px solid var(--color-sun); outline-offset: 2px; border-radius: 6px; }
 
-.font-serif, .h1, .h2, .display { font-family: var(--font-serif); font-optical-sizing: auto; }
-.num, .tabular-nums { font-variant-numeric: tabular-nums lining-nums; font-feature-settings: "tnum", "lnum"; }
+.font-display, .h1, .h2, .h3, .display { font-family: var(--font-display); font-optical-sizing: auto; }
+.num, .tabular-nums { font-variant-numeric: tabular-nums lining-nums; }
 
 .container-x { @apply mx-auto w-full max-w-6xl px-5 sm:px-8; }
-.eyebrow { @apply text-xs font-semibold uppercase tracking-[0.22em] text-brass-ink; }
-.on-dark .eyebrow, .eyebrow-dark { @apply text-brass; }
-.display { @apply text-[2.35rem] leading-[1.05] font-medium tracking-[-0.02em] sm:text-6xl; }
-.h1 { @apply text-[2rem] leading-[1.1] font-medium tracking-[-0.015em] sm:text-5xl; }
-.h2 { @apply text-2xl leading-tight font-medium tracking-[-0.01em] sm:text-3xl; }
+.kicker { @apply inline-flex items-center gap-2 rounded-full bg-green-soft px-3 py-1 text-sm font-semibold text-green; }
+.display { @apply text-[2.6rem] leading-[1.02] font-bold tracking-[-0.03em] text-green sm:text-[4.2rem]; }
+.h1 { @apply text-[2.2rem] leading-[1.05] font-bold tracking-[-0.025em] text-green sm:text-5xl; }
+.h2 { @apply text-[1.85rem] leading-[1.1] font-bold tracking-[-0.02em] text-green sm:text-[2.6rem]; }
+.h3 { @apply text-xl leading-snug font-bold text-ink; }
 .lead { @apply text-lg leading-relaxed text-muted sm:text-xl; }
-.on-dark .lead { @apply text-mist; }
-.rule-brass { height: 1px; background: linear-gradient(90deg, transparent, var(--color-brass) 20%, var(--color-brass) 80%, transparent); opacity: .55; }
 
-.btn { @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-navy px-6 py-3 text-[0.95rem] font-semibold tracking-wide text-white transition hover:bg-navy-2 disabled:opacity-50; }
-.on-dark .btn { @apply bg-brass text-ink hover:bg-brass-soft; }
-.btn-secondary { @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-navy/25 bg-transparent px-6 py-3 text-[0.95rem] font-semibold tracking-wide text-navy transition hover:border-navy; }
-.on-dark .btn-secondary { @apply border-white/30 text-white hover:border-brass hover:text-brass-soft; }
-.input { @apply block min-h-12 w-full rounded-md border border-line bg-white px-3.5 py-3 text-base text-body transition placeholder:text-slate-400 hover:border-[#cfc7b5] focus:border-navy focus:outline-none; }
-.label { @apply mb-1.5 block text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-muted; }
-.card { @apply rounded-xl border border-line bg-white p-5 sm:p-6; }
+.btn { @apply inline-flex min-h-13 items-center justify-center gap-2 rounded-full bg-sun px-7 py-3 text-[1.02rem] font-bold text-ink shadow-[0_6px_0_-2px_#c2410c33] transition hover:bg-sun-2 active:translate-y-px disabled:opacity-50; }
+.btn-green { @apply inline-flex min-h-13 items-center justify-center gap-2 rounded-full bg-green px-7 py-3 text-[1.02rem] font-bold text-white transition hover:bg-green-2 disabled:opacity-50; }
+.btn-secondary { @apply inline-flex min-h-13 items-center justify-center gap-2 rounded-full border-2 border-green/20 bg-white px-6 py-3 text-[1.02rem] font-bold text-green transition hover:border-green; }
+.link { @apply font-semibold text-green underline decoration-sun decoration-2 underline-offset-4 hover:decoration-green; }
+.input { @apply block min-h-13 w-full rounded-2xl border-2 border-line bg-white px-4 py-3 text-lg text-ink transition placeholder:text-stone-400 hover:border-sand-2 focus:border-green focus:outline-none; }
+.label { @apply mb-2 block text-base font-semibold text-ink; }
+.card { @apply rounded-3xl border border-line bg-white p-5 sm:p-7; }
 
-.hero-bg {
-  background:
-    radial-gradient(1200px 500px at 85% -10%, rgba(201,164,92,.16), transparent 60%),
-    radial-gradient(900px 500px at -10% 110%, rgba(31,111,84,.18), transparent 60%),
-    linear-gradient(180deg, var(--color-ink), var(--color-navy));
-}
-.grain { background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px); background-size: 48px 48px; }
-.statement { @apply rounded-2xl border border-line-dark bg-[#0c1830]/90 text-white shadow-[0_30px_80px_-30px_rgba(0,0,0,.6)] backdrop-blur; }
-.statement .input { font-variant-numeric: tabular-nums; @apply border-line-dark bg-ink/60 text-white hover:border-brass/60 focus:border-brass; }
-.statement .label { @apply text-mist; }
-.prose-legal h2 { @apply mt-8 font-serif text-xl font-medium; }
-.prose-legal p, .prose-legal li { @apply leading-relaxed text-body; }
+/* FAQ */
+.faq details { @apply border-b border-line; }
+.faq summary { @apply flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 py-4 text-lg font-semibold text-ink; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-green-soft text-xl font-bold text-green transition; }
+.faq details[open] summary::after { content: "–"; }
+.faq details > div { @apply pb-5 text-muted; }
+
+/* Hero split animation */
+@keyframes split-left { from { transform: translateX(14px); opacity: .0; } to { transform: none; opacity: 1; } }
+@keyframes split-right { from { transform: translateX(-14px); opacity: .0; } to { transform: none; opacity: 1; } }
+@keyframes rise { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+.split-a { animation: split-left .7s .35s both cubic-bezier(.2,.8,.2,1); }
+.split-b { animation: split-right .7s .5s both cubic-bezier(.2,.8,.2,1); }
+.rise { animation: rise .6s .1s both ease-out; }
+
+/* Range slider */
+.range { @apply h-3 w-full cursor-pointer appearance-none rounded-full bg-sand-2; accent-color: var(--color-green); }
+.range::-webkit-slider-thumb { @apply h-8 w-8 appearance-none rounded-full border-4 border-white bg-green shadow-md; }
+.range::-moz-range-thumb { @apply h-7 w-7 rounded-full border-4 border-white bg-green shadow-md; }
+
+.prose-legal h2 { @apply mt-8 font-display text-2xl font-bold text-green; }
+.prose-legal p, .prose-legal li { @apply leading-relaxed text-ink; }

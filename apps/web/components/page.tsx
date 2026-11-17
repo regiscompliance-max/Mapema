@@ -1,17 +1,18 @@
 import { ReactNode } from 'react';
 
-/** Navy title band used by every inner page, followed by the page body on paper. */
+/** Light title band for inner pages: a soft sunrise glow behind a bold, friendly heading. */
 export function PageHero({ eyebrow, title, lead, children }: { eyebrow?: ReactNode; title: ReactNode; lead?: ReactNode; children?: ReactNode }) {
   return (
-    <section className="hero-bg on-dark relative overflow-hidden text-white">
-      <div className="grain pointer-events-none absolute inset-0" aria-hidden="true" />
-      <div className="container-x relative py-14 sm:py-20">
-        {eyebrow && <p className="eyebrow mb-4">{eyebrow}</p>}
+    <section className="relative overflow-hidden border-b border-line bg-cream">
+      <svg className="pointer-events-none absolute -right-24 -top-10 w-[34rem] max-w-none opacity-80 sm:right-0" viewBox="0 0 400 220" aria-hidden="true">
+        <circle cx="300" cy="200" r="150" fill="#ffe8d6" /><circle cx="300" cy="200" r="90" fill="#fed7aa" opacity=".7" /><circle cx="300" cy="200" r="46" fill="#fdba74" opacity=".8" />
+      </svg>
+      <div className="container-x relative py-12 sm:py-20">
+        {eyebrow && <p className="kicker mb-5">{eyebrow}</p>}
         <h1 className="h1 max-w-3xl">{title}</h1>
         {lead && <p className="lead mt-5 max-w-2xl">{lead}</p>}
         {children && <div className="mt-8">{children}</div>}
       </div>
-      <div className="rule-brass" />
     </section>
   );
 }
@@ -20,16 +21,18 @@ export function Body({ children, narrow = false }: { children: ReactNode; narrow
   return <div className={`container-x py-12 sm:py-16 ${narrow ? 'max-w-3xl' : ''}`}>{children}</div>;
 }
 
-/** Numbered list styled as a ledger of points. */
+/** Simple checklist rows. */
 export function Points({ items }: { items: ReactNode[] }) {
   return (
-    <ol className="divide-y divide-line border-y border-line">
+    <ul className="space-y-4">
       {items.map((it, i) => (
-        <li key={i} className="grid grid-cols-[3rem_1fr] gap-4 py-6 sm:grid-cols-[5rem_1fr]">
-          <span className="num font-serif text-2xl text-brass-ink">{String(i + 1).padStart(2, '0')}</span>
-          <span className="text-lg leading-relaxed">{it}</span>
+        <li key={i} className="flex gap-4 rounded-3xl bg-white p-5 ring-1 ring-line">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-green text-white" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </span>
+          <span className="pt-1 text-lg">{it}</span>
         </li>
       ))}
-    </ol>
+    </ul>
   );
 }
