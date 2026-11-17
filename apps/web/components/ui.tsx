@@ -44,12 +44,13 @@ export function ErrorBox({ error }: { error: ApiError | null }) {
 }
 
 export interface Col<R> { key: string; label: string; render?: (r: R) => ReactNode; money?: boolean }
-export function Table<R extends Record<string, any>>({ rows, cols, empty }: { rows: R[] | null; cols: Col<R>[]; empty?: string }) {
+export function Table<R extends Record<string, any>>({ rows, cols, empty, label }: { rows: R[] | null; cols: Col<R>[]; empty?: string; label?: string }) {
   const t = useT();
   if (!rows) return <p>{t('portal.loading')}</p>;
   if (!rows.length) return <p className="text-slate-600">{empty ?? t('portal.empty')}</p>;
   return (
-    <div className="overflow-x-auto">
+    // focusable scroll region so keyboard users can scroll wide tables at phone width (WCAG 2.1.1, axe scrollable-region-focusable)
+    <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={label ?? cols.map((c) => c.label).filter(Boolean).slice(0, 3).join(', ')}>
       <table className="min-w-full text-sm">
         <thead><tr className="border-b text-left">{cols.map((c) => <th key={c.key} className="px-2 py-2 font-semibold">{c.label}</th>)}</tr></thead>
         <tbody>{rows.map((r, i) => (
