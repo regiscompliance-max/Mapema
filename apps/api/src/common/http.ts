@@ -7,10 +7,10 @@ export const zDate = z.string().refine((d) => {
   try { assertIsoDate(d); return true; } catch { return false; }
 }, 'must be a real ISO date YYYY-MM-DD');
 export const zCents = z.union([z.number(), z.string()]).transform((v, ctx) => {
-  try { return parseCents(v); } catch (e) { ctx.addIssue({ code: z.ZodIssueCode.custom, message: (e as Error).message }); return z.NEVER; }
+  try { return parseCents(v); } catch (e) { ctx.addIssue({ code: 'custom', message: (e as Error).message }); return z.NEVER; }
 });
 export const zPositiveCents = zCents.refine((v) => v > 0n, 'must be greater than zero');
-export const zKes = z.literal('KES', { errorMap: () => ({ message: 'Only KES is supported' }) });
+export const zKes = z.literal('KES', { error: 'Only KES is supported' });
 export const zKraPin = z.string().trim().toUpperCase().regex(/^[A-Z][0-9]{9}[A-Z]$/, 'KRA PIN format is A123456789B');
 export const zPhoneKe = z.string().regex(/^\+254[17]\d{8}$/, 'Kenyan number in +2547XXXXXXXX format');
 export const zText = (max = 500) => z.string().trim().min(1).max(max);

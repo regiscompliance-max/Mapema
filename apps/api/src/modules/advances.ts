@@ -376,7 +376,7 @@ export class AdvancesController {
   @Post('advances')
   @Roles('supplier_admin', 'supplier_user')
   accept(@CurrentUser() u: AuthUser, @Body() b: unknown, @Headers('idempotency-key') key: string | undefined, @Req() req: any) {
-    const body = z.object({ disclosureIds: z.array(zUuid).min(1).max(50), acceptTerms: z.literal(true, { errorMap: () => ({ message: 'You must accept the fee and terms' }) }) }).parse(b);
+    const body = z.object({ disclosureIds: z.array(zUuid).min(1).max(50), acceptTerms: z.literal(true, { error: 'You must accept the fee and terms' }) }).parse(b);
     return this.idem.run(key, u.id, body, () => this.s.accept(u, body.disclosureIds, req.ip));
   }
 

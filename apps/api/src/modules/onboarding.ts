@@ -491,7 +491,7 @@ export class OnboardingController {
 
   @Put('organisations/:id/kyb')
   kyb(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() b: unknown) {
-    const body = z.object({ tradingName: z.string().max(200).optional(), address: z.record(z.string().max(200)).optional(), sectorCode: z.string().max(20).optional() }).parse(b);
+    const body = z.object({ tradingName: z.string().max(200).optional(), address: z.record(z.string(), z.string().max(200)).optional(), sectorCode: z.string().max(20).optional() }).parse(b);
     return this.s.updateKyb(u, zOrgId.parse(id), body);
   }
 
