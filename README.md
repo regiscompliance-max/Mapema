@@ -1,8 +1,8 @@
-# Mapema platform — Phase 1 (lending core MVP)
+# Mapema platform — Phase 1 + 1b (lending core MVP)
 
 **[Technical Writer]** Buyer-led supplier early-payment platform for Kenya. One web app (public site plus buyer, supplier, staff and read-only portals), a NestJS API, a background worker, PostgreSQL, and **Apache Fineract as the loan and accounting ledger**. Every outside provider sits behind an adapter that has a mock.
 
-> Phase 1 status, coverage, test numbers and open items: [`docs/phase-1/README.md`](docs/phase-1/README.md).
+> Phase 1 status, coverage, test numbers and open items: [`docs/phase-1/README.md`](docs/phase-1/README.md). Phase 1b (remaining screens, cookie sessions, shortfalls, shared rate limit, review reminders): [`docs/phase-1b/README.md`](docs/phase-1b/README.md).
 > Nothing here is deployed. There is no staging environment yet, and no pen test has been done.
 
 ## Repository layout
@@ -14,12 +14,13 @@
 | `apps/api` | NestJS API (`/v1`): auth/MFA/step-up, onboarding, invoices, advances, payments, approvals (maker-checker), ops, admin, reports/audit, public, dev-only routes |
 | `apps/worker` | Scheduled jobs: outbox, payout status, held remainders, late ladder, reconciliation (one active worker via an advisory lock) |
 | `apps/web` | Next.js 16 / React 19 / Tailwind 4: public site, sign-in, invitation, portals (EN plus draft SW) |
-| `db/migrations` | SQL migrations (001 Phase 0 schema, 002 Phase 1, 003 role-grant approval) |
+| `db/migrations` | SQL migrations (001 Phase 0 schema, 002 Phase 1, 003 role-grant approval, 004 supplier shortfall, 005 web sessions, 006 shared rate limit, 007 credit review tasks) |
 | `openapi/openapi.yaml` | Generated contract for the API as implemented (`npm run openapi:gen`) |
 | `openapi/phase-0-design.yaml` | Phase 0 design contract (warnings fixed) |
-| `scripts/` | `migrate.mjs`, `seed.mjs`, `gen-openapi.mjs`, `ui-smoke.mjs` |
+| `scripts/` | `migrate.mjs`, `seed.mjs`, `gen-openapi.mjs`, `ui-smoke.mjs`, `smoke-stack.sh` |
 | `infra/` | Dockerfiles, Keycloak realm, DB init (written, **not run**: no Docker on the build box) |
 | `docs/phase-1/` | Phase 1 report, compliance review, QA report, security checklist, CEO questions |
+| `docs/phase-1b/` | Phase 1b report, QA report, security checklist update |
 
 ## Prerequisites
 
@@ -63,7 +64,7 @@ With mock providers, run the API **without** a separate worker and trigger jobs 
 2. Sign in as `credit@` → Advances → Approve. Then sign in as `ops@` → Advances → Release payment.
 3. The buyer payment is simulated with `POST /v1/dev/bank/credit`. Then run jobs. The ops user releases the KES 152,700 balance under Payments.
 
-`node scripts/ui-smoke.mjs` automates steps 1–2 plus the auditor and buyer checks (needs `playwright-core` and Chrome).
+`scripts/ui-smoke.mjs` automates these steps and every Phase 1b screen (42 checks, cookie/CSRF checks, axe scan); see Tests below for how to run it on a fresh stack.
 
 ## Tests
 
@@ -74,7 +75,7 @@ With mock providers, run the API **without** a separate worker and trigger jobs 
 | `npm run test:fineract` | Fineract adapter proof test: exactly KES 44,800 interest, principal-first allocation |
 | `npm run typecheck` / `npm run build` | All workspaces |
 | `npm run lint:openapi` | Redocly lint of both OpenAPI files (0 warnings) |
-| `node scripts/ui-smoke.mjs` | Browser smoke against a seeded local stack |
+| `ENV_FILE=/path/env scripts/smoke-stack.sh` then `NODE_PATH=<dir with playwright-core, axe-core> WEB_URL=http://localhost:3000 API_URL=http://localhost:4000 node scripts/ui-smoke.mjs` | Fresh database + seeded stack, then the 42-check browser smoke at 390 px with an axe scan. Build the web first with `NEXT_PUBLIC_API_URL=http://localhost:4000 NEXT_PUBLIC_DEV_SIGNIN=true`. The smoke funds the mock bank via `/v1/dev/bank/fund` before releasing |
 
 Key money tests: `apps/api/test/worked-example.e2e.test.ts` (the brief's worked example end to end through HTTP), `settlement-scenarios.e2e.test.ts` (early, partial, held, duplicate, unmatched, AML, overpayment, late ladder, disputes, complaints), and `packages/adapters/test/fineract.live.test.ts`.
 
@@ -85,6 +86,7 @@ The full list with comments is in [`.env.example`](.env.example). It contains no
 - Runtime: `APP_ENV`, `PORT`, `WEB_ORIGIN`
 - Database: `DATABASE_URL` (app role), `DATABASE_ADMIN_URL`, `TEST_DATABASE_ADMIN_URL`, `APP_DB_LOGIN_PASSWORD`
 - Identity: `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL`, `DEV_IDP_ENABLED`, `STEP_UP_MAX_AGE_SEC`
+- Browser sessions and limits (Phase 1b): `SESSION_IDLE_MINUTES` (15), `SESSION_MAX_HOURS` (8), `RATE_LIMIT_STORE` (`postgres`|`memory`), `KYC_REFRESH_MONTHS` (12). The web signs in by swapping the IdP token for an httpOnly `mapema_sid` cookie; writes send `X-CSRF-Token`
 - Encryption: `PII_ENCRYPTION_KEY`, `PII_BLIND_INDEX_KEY`, `STORAGE_ENCRYPTION_KEY`, `STORAGE_DIR`
 - Business: `INVITE_TTL_HOURS`, `QUOTE_TTL_MINUTES`, `BANK_ACCOUNT_COOLING_OFF_HOURS`
 - Adapters: `ADAPTER_MODE_{LEDGER,BANK,ETIMS,CRB,KYC,ESIGN,SMS,EMAIL}` (`mock|sandbox|live`; live only in production, and production refuses mock), `FINERACT_*`, `BANK_WEBHOOK_SECRET`, `ESIGN_WEBHOOK_SECRET`, `ESIGN_MOCK_AUTOCOMPLETE`, `AT_*`, `POSTMARK_SERVER_TOKEN`, `EMAIL_FROM`

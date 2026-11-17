@@ -20,3 +20,16 @@ Phase 0 decisions D-01 to D-18 are in `phase-0/README.md` (delivered in `mapema-
 | D-28 (P1-10) | The 30/90-day non-performing period goes in the master agreement, pending counsel. |
 | D-29 (P1-11) | Keep the Postgres job queue instead of Redis for now. |
 | D-30 (P1-12) | Confirm the simple APR method (44.96% for the worked example) with counsel before marketing uses it. |
+
+### Phase 1b engineering decisions (17 Nov 2026)
+
+**[Tech Lead + Security Engineer]** Recorded 17 Nov 2026, 19:20 GMT (London). Defaults taken while building Phase 1b. Each is listed as a question for Deng in `app/docs/phase-1b/README.md`; they stand unless he says otherwise.
+
+| ID | Decision |
+| --- | --- |
+| D-31 | Browser sessions are server-side. The `mapema_sid` cookie (HttpOnly, Secure, SameSite=Strict) holds an opaque id; only its SHA-256 is stored. CSRF uses an HMAC synchroniser token in `X-CSRF-Token`, an Origin allow-list and SameSite. Sessions last 15 min idle and 8 h at most; step-up rotates the id. Bearer tokens remain for API clients. Implements D-25. |
+| D-32 | For now the OIDC PKCE code exchange stays in the browser (token in memory only, swapped for the cookie at once). A server-side BFF exchange is required before go-live. |
+| D-33 | Shortfall (implements D-22): after Mapema is repaid, any unpaid remainder is recorded as owed by the buyer to the supplier. Later buyer payments matched by invoice reference go to the supplier. The supplier admin can close a shortfall as recovered directly or forgiven. Mapema does not chase the buyer for the supplier. Wording to counsel. |
+| D-34 | The rate limiter is shared through Postgres (UNLOGGED table) instead of adding Redis (consistent with D-29). It fails open if the store errors. |
+| D-35 | KYC checks are valid for 12 months (`KYC_REFRESH_MONTHS`). This is a Mapema policy default, not a cited regulatory figure (unverified), for compliance/counsel to confirm. Reminders go out at 30/7/0 days; new advances are refused once a check expires or a programme passes its review date. |
+| D-36 | Payment receipts (BUY-12) are issued as plain receipts marked "not a tax invoice". Statements and fee invoices stay blocked on tax advice (D-24). |
