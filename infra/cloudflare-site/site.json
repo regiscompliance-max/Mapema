@@ -1,0 +1,6 @@
+{
+  "scriptName": "mapema",
+  "compatibilityDate": "2026-11-01",
+  "d1": { "binding": "DB", "databaseName": "mapema-site", "databaseId": "b797d9df-86da-4232-8453-7aa129dcc6b2" },
+  "privacyNoticeVersion": "PN-2026-11-v1"
+}

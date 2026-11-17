@@ -60,7 +60,7 @@
   "footer.dp": "Haki zako za data",
   "footer.cbk": "Hali ya leseni ya CBK",
   "complaints.title": "Wasilisha lalamiko",
-  "complaints.lead": "Wateja walioingia wataweza kulalamika kupitia lango lao. Barua pepe na nambari ya simu ya malalamiko zitachapishwa hapa kabla ya kuzindua. Tunathibitisha ndani ya siku 7 na kulenga kutatua ndani ya siku 30. Usiporidhika unaweza kupeleka kwa Benki Kuu ya Kenya.",
+  "complaints.lead": "Wateja walioingia wanaweza kulalamika kupitia lango lao. Unaweza pia kuandika kwa {email} au kupiga {phone}. Tunathibitisha ndani ya siku 7 na kulenga kutatua ndani ya siku 30. Usiporidhika unaweza kupeleka kwa Benki Kuu ya Kenya.",
   "dp.title": "Haki zako za data",
   "dp.lead": "Unaweza kuomba kuona, kusahihisha, kufuta au kuhamisha data yako binafsi, au kupinga jinsi tunavyoitumia. Tutathibitisha utambulisho wako kwanza.",
   "dp.email": "Barua pepe yako",
@@ -112,6 +112,11 @@
   "staff.settings": "Mipangilio",
   "auditor.title": "Mkaguzi (kusoma tu)",
   "nav.portalSoon": "Lango linakuja hivi karibuni",
-  "book.soon": "Kuweka miadi mtandaoni kunakuja hivi karibuni. Bado hatupokei maombi ya simu kupitia tovuti hii, kwa hivyo tafadhali usitume taarifa zako binafsi hapa.",
-  "dp.soon": "Maombi ya data mtandaoni yanakuja hivi karibuni. Tovuti hii haikusanyi data binafsi."
+  "footer.contact": "Mawasiliano: {general} · Malalamiko: {email} · {phone} · {address}",
+  "book.notice": "Ilani ya ulinzi wa data: Mapema Limited ndiye mdhibiti wa data. Tunatumia taarifa unazotoa hapa kuwasiliana nawe kuhusu ombi hili pekee, tunazihifadhi hadi miezi 12 isipokuwa uwe mteja, na hatuzitumii kwa matangazo. Unaweza kuomba kuziona, kuzisahihisha au kuzifuta kupitia Haki zako za data au kwa kuandika kwa {dpo}. Tazama ilani kamili ya faragha.",
+  "dp.notice": "Ilani ya ulinzi wa data: Mapema Limited inatumia barua pepe na ombi lako kuthibitisha utambulisho wako na kujibu ombi hili pekee, chini ya Sheria ya Ulinzi wa Data, 2019. Tunahifadhi rekodi ya ombi kwa muda unaotakiwa na sheria. Unaweza pia kuandika kwa {dpo}, au kulalamika kwa Ofisi ya Kamishna wa Ulinzi wa Data.",
+  "dp.details": "Maelezo (si lazima)",
+  "form.error.invalid": "Tafadhali kagua taarifa ulizoweka kisha ujaribu tena.",
+  "form.error.network": "Hatukuweza kutuma ombi lako. Tafadhali jaribu tena baada ya muda mfupi.",
+  "form.sending": "Inatuma…"
 }

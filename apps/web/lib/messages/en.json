@@ -60,7 +60,7 @@
   "footer.dp": "Your data rights",
   "footer.cbk": "CBK licence status",
   "complaints.title": "Make a complaint",
-  "complaints.lead": "Signed-in customers will be able to complain from their portal. Our complaints email address and phone line will be published here before we launch. We acknowledge within 7 days and aim to resolve within 30 days. If you are not satisfied you may escalate to the Central Bank of Kenya.",
+  "complaints.lead": "Signed-in customers can complain from their portal. You can also write to {email} or call {phone}. We acknowledge within 7 days and aim to resolve within 30 days. If you are not satisfied you may escalate to the Central Bank of Kenya.",
   "dp.title": "Your data rights",
   "dp.lead": "You can ask to see, correct, delete or move your personal data, or object to how we use it. We will verify your identity first.",
   "dp.email": "Your email",
@@ -112,6 +112,11 @@
   "staff.settings": "Settings",
   "auditor.title": "Auditor (read-only)",
   "nav.portalSoon": "Portal coming soon",
-  "book.soon": "Online booking is coming soon. We are not taking call requests through this website yet, so please do not send personal details here. Our contact details will be published on this page before launch.",
-  "dp.soon": "Online data requests are coming soon. This website does not collect personal data. Once Mapema is live, you will be able to make an access, correction, deletion, objection, portability or restriction request here or from your portal."
+  "footer.contact": "Contact: {general} · Complaints: {email} · {phone} · {address}",
+  "book.notice": "Data protection notice: Mapema Limited is the data controller. We use the details you give here only to contact you about this request, keep them for up to 12 months unless you become a customer, and do not use them for marketing. You can ask to access, correct or delete them at Your data rights or by writing to {dpo}. See the full privacy notice.",
+  "dp.notice": "Data protection notice: Mapema Limited uses your email and request only to verify who you are and to answer this request under the Data Protection Act, 2019. We keep a record of the request for the period the law requires. You can also write to {dpo}, or complain to the Office of the Data Protection Commissioner.",
+  "dp.details": "Details (optional)",
+  "form.error.invalid": "Please check the highlighted details and try again.",
+  "form.error.network": "We could not send your request. Please try again in a moment.",
+  "form.sending": "Sending…"
 }

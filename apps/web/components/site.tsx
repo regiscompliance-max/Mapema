@@ -1,5 +1,7 @@
 import Link from 'next/link';
-import { Lang, translate } from '@/lib/i18n';
+import { Lang } from '@/lib/i18n';
+import { LangSwitch, T } from './lang';
+import { contactParams } from '@/lib/site-config';
 
 /** Static site: no API call. Lending stays off until a CBK licence number is entered in the platform. */
 export async function cbkStatus(): Promise<{ lendingEnabled: boolean; cbkLicenceNo: string | null; statement: string }> {
@@ -7,7 +9,8 @@ export async function cbkStatus(): Promise<{ lendingEnabled: boolean; cbkLicence
 }
 
 export function Header({ lang }: { lang: Lang }) {
-  const t = (k: string) => translate(lang, k);
+  const t = (k: string) => <T k={k} p={contactParams()} />;
+  void lang;
   return (
     <header className="border-b border-slate-200">
       <nav className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3" aria-label="Main">
@@ -15,6 +18,7 @@ export function Header({ lang }: { lang: Lang }) {
         <Link href="/buyers" className="py-2">{t('nav.buyers')}</Link>
         <Link href="/suppliers" className="py-2">{t('nav.suppliers')}</Link>
         <Link href="/pricing" className="py-2">{t('nav.pricing')}</Link>
+        <LangSwitch />
         <span className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-600" data-testid="portal-soon">{t('nav.portalSoon')}</span>
       </nav>
     </header>
@@ -22,11 +26,13 @@ export function Header({ lang }: { lang: Lang }) {
 }
 
 export async function Footer({ lang }: { lang: Lang }) {
-  const t = (k: string) => translate(lang, k);
+  const t = (k: string) => <T k={k} p={contactParams()} />;
+  void lang;
   const s = await cbkStatus();
   return (
     <footer className="mt-16 border-t border-slate-200 bg-slate-50">
       <div className="mx-auto max-w-5xl space-y-3 px-4 py-8 text-sm text-slate-600">
+        <p data-testid="footer-contact">{t('footer.contact')}</p>
         <p data-testid="cbk-statement">{s.statement}</p>
         <ul className="flex flex-wrap gap-x-4 gap-y-2">
           <li><Link href="/complaints">{t('footer.complaints')}</Link></li>
