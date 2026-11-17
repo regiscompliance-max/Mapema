@@ -16,8 +16,8 @@
   "scripts": {
     "build": "npm run build -w @mapema/pricing -w @mapema/adapters && npm run build -w @mapema/api -w @mapema/worker && npm run build -w @mapema/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint:openapi": "redocly lint openapi/openapi.yaml",
-    "test": "npm run test -w @mapema/pricing -w @mapema/adapters -w @mapema/api -w @mapema/web",
+    "lint:openapi": "redocly lint openapi/openapi.yaml openapi/phase-0-design.yaml",
+    "test": "npm run test -w @mapema/pricing -w @mapema/adapters -w @mapema/api -w @mapema/worker -w @mapema/web",
     "test:unit": "npm run test -w @mapema/pricing -w @mapema/adapters",
     "test:api": "npm run test -w @mapema/api",
     "test:fineract": "npm run test:fineract -w @mapema/adapters",
@@ -25,7 +25,10 @@
     "db:seed": "node scripts/seed.mjs",
     "dev:api": "npm run dev -w @mapema/api",
     "dev:web": "npm run dev -w @mapema/web",
-    "dev:worker": "npm run dev -w @mapema/worker"
+    "dev:worker": "npm run dev -w @mapema/worker",
+    "openapi:gen": "node scripts/gen-openapi.mjs",
+    "test:e2e:fineract": "E2E_LEDGER=fineract npm run test -w @mapema/api",
+    "test:worker": "npm run test -w @mapema/worker"
   },
   "devDependencies": {
     "@redocly/cli": "^2.0.0",

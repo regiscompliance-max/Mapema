@@ -1,0 +1,2369 @@
+openapi: 3.1.0
+info:
+  title: Mapema Platform API
+  version: 0.1.0-phase0
+  summary: Buyer-led supplier early-payment platform (Kenya). Contract-first; Phase 0 draft.
+  description: |
+    [Solution Architect + Backend Engineer + Technical Writer]
+
+    Conventions
+    - All money fields are **integer KES cents** (`*_cents`, int64, >= 0). Any `currency` must be `KES`.
+      Non-integer or non-KES input is rejected with 422 (`MONEY_NOT_INTEGER_CENTS`, `CURRENCY_NOT_SUPPORTED`).
+    - Rates are integer basis points (`*_bps`; 8000 = 80%, 350 = 3.5%).
+    - Dates are ISO 8601 `YYYY-MM-DD` interpreted in East Africa Time (Africa/Nairobi); timestamps are RFC 3339 UTC.
+    - Errors use RFC 9457 `application/problem+json`.
+    - Every state-changing request that can move money or change limits/pricing/roles requires an
+      `Idempotency-Key` header and creates or acts on a maker-checker `ApprovalRequest`.
+    - Approve/release endpoints require a fresh MFA step-up: the access token must carry `acr=mfa-stepup`
+      issued within the last 5 minutes (enforced by the API; 401 `STEP_UP_REQUIRED` otherwise).
+    - Auditor and lender roles may only call GET endpoints (403 otherwise).
+    - Ledger balances are read from Apache Fineract; the API never accepts client-supplied balances.
+  contact:
+    name: Mapema engineering
+  license:
+    name: Proprietary - Mapema Limited, all rights reserved
+    identifier: LicenseRef-Mapema-Proprietary
+servers:
+  - url: https://api.mapema.co.ke
+    description: Production (placeholder)
+  - url: https://api.staging.mapema.co.ke
+    description: Staging (sandbox adapters)
+security:
+  - oidc: []
+tags:
+  - name: Public
+    description: Unauthenticated marketing-site endpoints (fee calculator, leads, CBK status).
+  - name: Identity
+    description: Current user, invitations, MFA and sessions.
+  - name: Organisations
+    description: Buyer and supplier organisations, people and bank accounts.
+  - name: KYC and consent
+    description: Identity, KYB and CRB checks and Data Protection Act consents.
+  - name: Programmes and limits
+    description: Buyer programmes, supplier limits and concentration limits.
+  - name: Invoices
+    description: Invoice capture, eTIMS validation and buyer maker-checker.
+  - name: Confirmations
+    description: Irrevocable letters of undertaking (ILU) signed by the buyer.
+  - name: Advances
+    description: Quotes with full disclosure, acceptance, credit decision and release.
+  - name: Approvals
+    description: Maker-checker approval requests.
+  - name: Payouts
+    description: Advance and balance payouts to suppliers.
+  - name: Payments
+    description: Buyer repayments, matching and CBK-order allocation.
+  - name: Collections and disputes
+    description: Late ladder, recourse and invoice disputes.
+  - name: Customer care
+    description: Complaints and data-subject requests.
+  - name: Reconciliation
+    description: Bank vs Fineract vs platform reconciliation.
+  - name: Admin
+    description: Pricing (with CBK approval reference), float, lending switch and settings.
+  - name: Reports and audit
+    description: Portfolio reports, audit log and exports.
+  - name: Webhooks
+    description: Signed inbound callbacks from bank and e-signature providers.
+
+paths:
+  /v1/public/fee-quote:
+    post:
+      tags: [Public]
+      operationId: publicFeeQuote
+      summary: Indicative fee calculator (same pricing engine as lending)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invoice_amount_cents, days]
+              properties:
+                invoice_amount_cents: { $ref: '#/components/schemas/MoneyCents' }
+                days: { type: integer, minimum: 1, maximum: 180 }
+                currency: { $ref: '#/components/schemas/Currency' }
+            example: { invoice_amount_cents: 100000000, days: 48, currency: KES }
+      responses:
+        '200':
+          description: Quote
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PriceBreakdown' }
+              example:
+                invoice_amount_cents: 100000000
+                days: 48
+                advance_rate_bps: 8000
+                discount_rate_bps_per_30d: 350
+                advance_cents: 80000000
+                discount_fee_cents: 4480000
+                verification_fee_cents: 250000
+                total_cost_cents: 4730000
+                mapema_keeps_cents: 84730000
+                supplier_balance_cents: 15270000
+                apr_bps: 4496
+                pricing_version_code: STD-DEFAULT
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /v1/public/leads:
+    post:
+      tags: [Public]
+      operationId: createLead
+      summary: Buyer "Book a call"
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeadCreate' }
+      responses:
+        '201': { description: Lead created }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /v1/me:
+    get:
+      tags: [Identity]
+      operationId: getMe
+      summary: Current user, roles and org scopes
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/invitations:
+    post:
+      tags: [Identity]
+      operationId: createInvitation
+      summary: Invite a buyer user, supplier, staff member or auditor
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvitationCreate' }
+      responses:
+        '201':
+          description: Invitation created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invitation' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/invitations/{token}/accept:
+    post:
+      tags: [Identity]
+      operationId: acceptInvitation
+      summary: Accept invitation
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string, minLength: 32 }
+      responses:
+        '200': { description: Accepted; redirect to IdP registration with MFA enrolment }
+        '410': { description: Expired or revoked }
+
+  /v1/organisations:
+    get:
+      tags: [Organisations]
+      operationId: listOrganisations
+      summary: List organisations
+      parameters:
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/OrgType' } }
+        - { name: status, in: query, schema: { type: string } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Page of organisations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Organisation' } }
+                  next_cursor: { type: [string, 'null'] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Organisations]
+      operationId: createOrganisation
+      summary: Staff create buyer prospect
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrganisationCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Organisation' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /v1/organisations/{orgId}:
+    parameters: [ { $ref: '#/components/parameters/OrgId' } ]
+    get:
+      tags: [Organisations]
+      operationId: getOrganisation
+      summary: Get organisation
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Organisation' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Organisations]
+      operationId: updateOrganisation
+      summary: Update KYB details (only before approval; afterwards creates a change request)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrganisationUpdate' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Organisation' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /v1/organisations/{orgId}/submit-kyb:
+    parameters: [ { $ref: '#/components/parameters/OrgId' } ]
+    post:
+      tags: [Organisations]
+      operationId: submitKyb
+      summary: Submit kyb
+      responses:
+        '202': { description: Submitted for review }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/organisations/{orgId}/people:
+    parameters: [ { $ref: '#/components/parameters/OrgId' } ]
+    get:
+      tags: [Organisations]
+      operationId: listPeople
+      summary: List people
+      responses:
+        '200':
+          description: People (PII masked)
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Person' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Organisations]
+      operationId: addPerson
+      summary: Add person
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PersonCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Person' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/organisations/{orgId}/bank-accounts:
+    parameters: [ { $ref: '#/components/parameters/OrgId' } ]
+    get:
+      tags: [Organisations]
+      operationId: listBankAccounts
+      summary: List bank accounts
+      responses:
+        '200':
+          description: Bank accounts (masked)
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/BankAccount' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Organisations]
+      operationId: addBankAccount
+      summary: Add/change payout account (step-up; cooling-off; ops call-back verification)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BankAccountCreate' }
+      responses:
+        '201':
+          description: Created, pending verification
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BankAccount' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/bank-accounts/{bankAccountId}/verify:
+    parameters:
+      - { name: bankAccountId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Organisations]
+      operationId: requestBankAccountVerification
+      summary: Ops records call-back verification (creates approval request)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [method, note]
+              properties:
+                method: { type: string, enum: [call_back, bank_name_match, letter] }
+                note: { type: string }
+      responses:
+        '202':
+          description: Approval request created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/documents/upload-url:
+    post:
+      tags: [Organisations]
+      operationId: createUploadUrl
+      summary: Presigned upload URL; file is virus-scanned before becoming available
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [owner_org_id, type, file_name, mime_type, size_bytes, sha256]
+              properties:
+                owner_org_id: { type: string, format: uuid }
+                owner_person_id: { type: string, format: uuid }
+                type: { $ref: '#/components/schemas/DocType' }
+                file_name: { type: string }
+                mime_type: { type: string, enum: [application/pdf, image/jpeg, image/png, text/csv] }
+                size_bytes: { type: integer, minimum: 1, maximum: 26214400 }
+                sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+      responses:
+        '201':
+          description: Upload target
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  document_id: { type: string, format: uuid }
+                  upload_url: { type: string, format: uri }
+                  expires_at: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/documents/{documentId}:
+    parameters:
+      - { name: documentId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Organisations]
+      operationId: getDocument
+      summary: Metadata + short-lived download URL (audited)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Document' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/organisations/{orgId}/kyc-checks:
+    parameters: [ { $ref: '#/components/parameters/OrgId' } ]
+    get:
+      tags: [KYC and consent]
+      operationId: listKycChecks
+      summary: List kyc checks
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/KycCheck' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [KYC and consent]
+      operationId: startKycCheck
+      summary: Start ID/liveness, registry, sanctions or bank name-match check via KYC adapter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [check_type]
+              properties:
+                check_type: { type: string, enum: [id_verification, liveness, company_registry, sanctions_pep, bank_name_match] }
+                person_id: { type: string, format: uuid }
+      responses:
+        '202':
+          description: Started (result by webhook)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/KycCheck' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/consents:
+    get:
+      tags: [KYC and consent]
+      operationId: listConsents
+      summary: List consents
+      parameters:
+        - { name: person_id, in: query, schema: { type: string, format: uuid } }
+        - { name: org_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Consent' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [KYC and consent]
+      operationId: grantConsent
+      summary: Grant consent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, text_version]
+              properties:
+                person_id: { type: string, format: uuid }
+                org_id: { type: string, format: uuid }
+                purpose: { $ref: '#/components/schemas/ConsentPurpose' }
+                text_version: { type: string }
+      responses:
+        '201':
+          description: Recorded
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Consent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/consents/{consentId}/withdraw:
+    parameters:
+      - { name: consentId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [KYC and consent]
+      operationId: withdrawConsent
+      summary: Withdraw consent
+      responses:
+        '200':
+          description: Withdrawn
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Consent' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/credit-checks:
+    post:
+      tags: [KYC and consent]
+      operationId: pullCreditReport
+      summary: Pull CRB report (requires active CRB consent; 422 CONSENT_REQUIRED otherwise)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bureau]
+              properties:
+                subject_org_id: { type: string, format: uuid }
+                subject_person_id: { type: string, format: uuid }
+                bureau: { type: string, description: 'Configured bureau code (provider TBD)' }
+      responses:
+        '201':
+          description: Report stored
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreditCheck' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/buyer-programmes:
+    post:
+      tags: [Programmes and limits]
+      operationId: proposeBuyerProgramme
+      summary: Credit proposes limit/rates/review date; creates CEO approval request (four-eyes)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BuyerProgrammeCreate' }
+      responses:
+        '202':
+          description: Approval request created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/buyer-programmes/{programmeId}:
+    parameters:
+      - { name: programmeId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Programmes and limits]
+      operationId: getBuyerProgramme
+      summary: Get buyer programme
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BuyerProgramme' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/supplier-links:
+    get:
+      tags: [Programmes and limits]
+      operationId: listSupplierLinks
+      summary: List supplier links
+      parameters:
+        - { name: buyer_id, in: query, schema: { type: string, format: uuid } }
+        - { name: supplier_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/SupplierLink' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/supplier-links/{linkId}/limit:
+    parameters:
+      - { name: linkId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Programmes and limits]
+      operationId: proposeSupplierLimit
+      summary: Propose supplier limit
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [supplier_limit_cents, reason]
+              properties:
+                supplier_limit_cents: { $ref: '#/components/schemas/MoneyCents' }
+                reason: { type: string }
+      responses:
+        '202':
+          description: Approval request created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/limits:
+    get:
+      tags: [Programmes and limits]
+      operationId: getLimits
+      summary: Limit configuration, float and current exposure/headroom
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LimitsOverview' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Programmes and limits]
+      operationId: proposeLimitChange
+      summary: Propose limit change
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LimitConfigChange' }
+      responses:
+        '202':
+          description: Approval request created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/float:
+    post:
+      tags: [Programmes and limits]
+      operationId: proposeFloatChange
+      summary: Propose float change
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount_cents, basis_note, effective_from]
+              properties:
+                amount_cents: { $ref: '#/components/schemas/MoneyCents' }
+                basis_note: { type: string }
+                effective_from: { type: string, format: date-time }
+      responses:
+        '202':
+          description: Approval request created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/invoices:
+    get:
+      tags: [Invoices]
+      operationId: listInvoices
+      summary: List invoices
+      parameters:
+        - { name: buyer_id, in: query, schema: { type: string, format: uuid } }
+        - { name: supplier_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/InvoiceStatus' } }
+        - { name: due_from, in: query, schema: { type: string, format: date } }
+        - { name: due_to, in: query, schema: { type: string, format: date } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Invoice' } }
+                  next_cursor: { type: [string, 'null'] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Invoices]
+      operationId: createInvoice
+      summary: Buyer maker uploads or supplier submits an invoice (eTIMS + duplicate checks)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvoiceCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invoice' }
+        '409':
+          description: Duplicate invoice (DUPLICATE_INVOICE)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/invoices/bulk:
+    post:
+      tags: [Invoices]
+      operationId: bulkUploadInvoices
+      summary: CSV upload; per-row results
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, contentMediaType: text/csv }
+      responses:
+        '200':
+          description: Row results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created: { type: integer }
+                  failed: { type: integer }
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        row: { type: integer }
+                        invoice_id: { type: [string, 'null'], format: uuid }
+                        errors: { type: array, items: { type: string } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/invoices/{invoiceId}:
+    parameters: [ { $ref: '#/components/parameters/InvoiceId' } ]
+    get:
+      tags: [Invoices]
+      operationId: getInvoice
+      summary: Get invoice
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invoice' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/invoices/{invoiceId}/decision:
+    parameters: [ { $ref: '#/components/parameters/InvoiceId' } ]
+    post:
+      tags: [Invoices]
+      operationId: decideInvoice
+      summary: Buyer checker approve/reject/hold (checker must not be uploader)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [approve, reject, hold, release_hold] }
+                reason_code: { type: string }
+                reason_text: { type: string }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invoice' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/invoices/{invoiceId}/etims-override:
+    parameters: [ { $ref: '#/components/parameters/InvoiceId' } ]
+    post:
+      tags: [Invoices]
+      operationId: requestEtimsOverride
+      summary: Staff override when eTIMS unavailable (maker-checker)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '202':
+          description: Approval request created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/confirmations:
+    post:
+      tags: [Confirmations]
+      operationId: createConfirmation
+      summary: Create ILU for one or many approved invoices and start e-signature
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invoice_ids, signatory_person_ids]
+              properties:
+                invoice_ids: { type: array, minItems: 1, items: { type: string, format: uuid } }
+                signatory_person_ids: { type: array, minItems: 1, items: { type: string, format: uuid } }
+      responses:
+        '201':
+          description: Created; returns signing session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Confirmation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/confirmations/{confirmationId}:
+    parameters:
+      - { name: confirmationId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Confirmations]
+      operationId: getConfirmation
+      summary: Get confirmation
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Confirmation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/quotes:
+    post:
+      tags: [Advances]
+      operationId: createQuotes
+      summary: Supplier requests price disclosures for one or many eligible invoices
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invoice_ids]
+              properties:
+                invoice_ids: { type: array, minItems: 1, items: { type: string, format: uuid } }
+      responses:
+        '201':
+          description: Disclosures (not yet accepted)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  disclosures: { type: array, items: { $ref: '#/components/schemas/PriceDisclosure' } }
+                  totals: { $ref: '#/components/schemas/PriceBreakdown' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/advances:
+    get:
+      tags: [Advances]
+      operationId: listAdvances
+      summary: List advances
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/AdvanceStatus' } }
+        - { name: buyer_id, in: query, schema: { type: string, format: uuid } }
+        - { name: supplier_id, in: query, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Advance' } }
+                  next_cursor: { type: [string, 'null'] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Advances]
+      operationId: requestAdvances
+      summary: Supplier accepts disclosures (step-up MFA) -> advances in status requested
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [price_disclosure_ids, accept_terms]
+              properties:
+                price_disclosure_ids: { type: array, minItems: 1, items: { type: string, format: uuid } }
+                accept_terms: { type: boolean, const: true }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Advance' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/advances/{advanceId}:
+    parameters: [ { $ref: '#/components/parameters/AdvanceId' } ]
+    get:
+      tags: [Advances]
+      operationId: getAdvance
+      summary: Advance with checks, disclosure, payouts and ledger balances read from Fineract
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdvanceDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/advances/{advanceId}/checks:
+    parameters: [ { $ref: '#/components/parameters/AdvanceId' } ]
+    get:
+      tags: [Advances]
+      operationId: runAdvanceChecks
+      summary: Re-run automatic checks (eTIMS, ILU, duplicates, limits, float, dispute, KYC, payout account)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CheckResults' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/advances/{advanceId}/approve:
+    parameters: [ { $ref: '#/components/parameters/AdvanceId' } ]
+    post:
+      tags: [Advances]
+      operationId: approveAdvance
+      summary: Credit approves (maker). Creates payout + payout_release approval request for a second user.
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      responses:
+        '202':
+          description: Approved; release pending
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalRequest' }
+        '409':
+          description: Checks failed (CHECKS_FAILED) with details
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /v1/advances/{advanceId}/decline:
+    parameters: [ { $ref: '#/components/parameters/AdvanceId' } ]
+    post:
+      tags: [Advances]
+      operationId: declineAdvance
+      summary: Decline advance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, description: Shown to the supplier }
+      responses:
+        '200':
+          description: Declined
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Advance' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/approvals:
+    get:
+      tags: [Approvals]
+      operationId: listApprovals
+      summary: List approvals
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ApprovalStatus' } }
+        - { name: actionable_by_me, in: query, schema: { type: boolean } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/ApprovalRequest' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/approvals/{approvalId}:
+    parameters: [ { $ref: '#/components/parameters/ApprovalId' } ]
+    get:
+      tags: [Approvals]
+      operationId: getApproval
+      summary: Get approval
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/approvals/{approvalId}/approve:
+    parameters: [ { $ref: '#/components/parameters/ApprovalId' } ]
+    post:
+      tags: [Approvals]
+      operationId: approveRequest
+      summary: Checker approves (must differ from maker; step-up MFA; for payout_release limits re-checked)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: Approved and executed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: SAME_USER_AS_MAKER or ROLE_NOT_PERMITTED
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409':
+          description: LIMIT_EXCEEDED, DISPUTE_FREEZE, EXPIRED, CHECKS_FAILED
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /v1/approvals/{approvalId}/reject:
+    parameters: [ { $ref: '#/components/parameters/ApprovalId' } ]
+    post:
+      tags: [Approvals]
+      operationId: rejectRequest
+      summary: Reject request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: Rejected
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/payouts:
+    get:
+      tags: [Payouts]
+      operationId: listPayouts
+      summary: List payouts
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/PayoutStatus' } }
+        - { name: advance_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Payout' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/payouts/{payoutId}/retry:
+    parameters:
+      - { name: payoutId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Payouts]
+      operationId: retryPayout
+      summary: Retry a release_failed payout with the same idempotency key
+      responses:
+        '202': { description: Retry queued }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/payments:
+    get:
+      tags: [Payments]
+      operationId: listPayments
+      summary: List payments
+      parameters:
+        - { name: matched, in: query, schema: { type: boolean } }
+        - { name: buyer_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Payment' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/payments/{paymentId}/match:
+    parameters:
+      - { name: paymentId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Payments]
+      operationId: proposeManualMatch
+      summary: Ops proposes manual match (maker); allocation preview returned; checker approves via /approvals
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [advance_ids]
+              properties:
+                advance_ids: { type: array, minItems: 1, items: { type: string, format: uuid } }
+                note: { type: string }
+      responses:
+        '202':
+          description: Approval request with allocation preview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  approval: { $ref: '#/components/schemas/ApprovalRequest' }
+                  preview: { type: array, items: { $ref: '#/components/schemas/Allocation' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/payment-calendar:
+    get:
+      tags: [Payments]
+      operationId: getPaymentCalendar
+      summary: Buyer amounts due to the collection account by date
+      parameters:
+        - { name: buyer_id, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  collection_account: { $ref: '#/components/schemas/CollectionAccount' }
+                  days:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string, format: date }
+                        amount_due_cents: { $ref: '#/components/schemas/MoneyCents' }
+                        invoice_ids: { type: array, items: { type: string, format: uuid } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/statements:
+    get:
+      tags: [Payments]
+      operationId: getStatement
+      summary: Get statement
+      parameters:
+        - { name: org_id, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: format, in: query, schema: { type: string, enum: [json, pdf, csv], default: json } }
+      responses:
+        '200': { description: Statement }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/disputes:
+    get:
+      tags: [Collections and disputes]
+      operationId: listDisputes
+      summary: List disputes
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Dispute' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Collections and disputes]
+      operationId: raiseDispute
+      summary: Buyer raises dispute -> freezes new advances against this buyer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invoice_id, reason_code]
+              properties:
+                invoice_id: { type: string, format: uuid }
+                reason_code: { type: string, enum: [goods_not_received, quality, pricing, duplicate, other] }
+                description: { type: string }
+                document_ids: { type: array, items: { type: string, format: uuid } }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dispute' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/disputes/{disputeId}/close:
+    parameters:
+      - { name: disputeId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Collections and disputes]
+      operationId: proposeDisputeClose
+      summary: Propose dispute close
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resolution]
+              properties:
+                resolution: { type: string }
+      responses:
+        '202':
+          description: Approval request created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/collections/late:
+    get:
+      tags: [Collections and disputes]
+      operationId: listLate
+      summary: Late-payment tracker with ladder stage
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    advance: { $ref: '#/components/schemas/Advance' }
+                    days_overdue: { type: integer }
+                    stage: { type: string, enum: [d1_reminder, d7_call, d14_demand, d30_recourse, npl] }
+                    recoverable_cap_cents: { $ref: '#/components/schemas/MoneyCents' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/advances/{advanceId}/collection-actions:
+    parameters: [ { $ref: '#/components/parameters/AdvanceId' } ]
+    post:
+      tags: [Collections and disputes]
+      operationId: logCollectionAction
+      summary: Log collection action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stage, channel]
+              properties:
+                stage: { type: string, enum: [d7_call, d14_demand, note] }
+                channel: { type: string, enum: [call, email, letter, sms] }
+                outcome: { type: string }
+      responses:
+        '201': { description: Logged }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/advances/{advanceId}/recourse:
+    parameters: [ { $ref: '#/components/parameters/AdvanceId' } ]
+    post:
+      tags: [Collections and disputes]
+      operationId: startRecourse
+      summary: Start recourse
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      responses:
+        '200':
+          description: Recourse started; supplier notified
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Advance' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/advances/{advanceId}/write-off:
+    parameters: [ { $ref: '#/components/parameters/AdvanceId' } ]
+    post:
+      tags: [Collections and disputes]
+      operationId: proposeWriteOff
+      summary: Propose write off
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '202':
+          description: Approval request created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/complaints:
+    get:
+      tags: [Customer care]
+      operationId: listComplaints
+      summary: List complaints
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Complaint' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Customer care]
+      operationId: createComplaint
+      summary: Create complaint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category, description]
+              properties:
+                category: { type: string }
+                description: { type: string, maxLength: 5000 }
+      responses:
+        '201':
+          description: Created; acknowledgement sent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Complaint' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/data-subject-requests:
+    get:
+      tags: [Customer care]
+      operationId: listDsr
+      summary: List dsr
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/DataSubjectRequest' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Customer care]
+      operationId: createDsr
+      summary: Create dsr
+      security: [ {}, { oidc: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, requester_email]
+              properties:
+                type: { type: string, enum: [access, correction, deletion, objection, portability, restriction] }
+                requester_email: { type: string, format: email }
+                details: { type: string }
+      responses:
+        '201':
+          description: Received; identity verification follows
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DataSubjectRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/reconciliation/runs:
+    get:
+      tags: [Reconciliation]
+      operationId: listReconRuns
+      summary: List recon runs
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/ReconciliationRun' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/reconciliation/breaks/{breakId}/close:
+    parameters:
+      - { name: breakId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Reconciliation]
+      operationId: proposeBreakClose
+      summary: Propose break close
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resolution_note]
+              properties:
+                resolution_note: { type: string }
+      responses:
+        '202':
+          description: Approval request created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/pricing-versions:
+    get:
+      tags: [Admin]
+      operationId: listPricingVersions
+      summary: List pricing versions
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PricingVersion' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Admin]
+      operationId: createPricingVersion
+      summary: Create draft pricing version
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PricingVersionCreate' }
+      responses:
+        '201':
+          description: Draft created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PricingVersion' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/pricing-versions/{pricingVersionId}/cbk-approval:
+    parameters:
+      - { name: pricingVersionId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Admin]
+      operationId: recordCbkApproval
+      summary: Record CBK approval reference + letter (required before scheduling)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cbk_approval_ref, cbk_approval_doc_id]
+              properties:
+                cbk_approval_ref: { type: string }
+                cbk_approval_doc_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Approved status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PricingVersion' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/pricing-versions/{pricingVersionId}/schedule:
+    parameters:
+      - { name: pricingVersionId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Admin]
+      operationId: proposePricingActivation
+      summary: Send customer notices and schedule (effective >= 30 days after notice); maker-checker
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [effective_from]
+              properties:
+                effective_from: { type: string, format: date }
+      responses:
+        '202':
+          description: Approval request created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalRequest' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/users:
+    get:
+      tags: [Admin]
+      operationId: listUsers
+      summary: List users
+      parameters:
+        - { name: org_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/User' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/users/{userId}/roles:
+    parameters:
+      - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [Admin]
+      operationId: proposeRoleChange
+      summary: Propose role change
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [grant, revoke]
+              properties:
+                grant: { type: array, items: { $ref: '#/components/schemas/RoleScope' } }
+                revoke: { type: array, items: { $ref: '#/components/schemas/RoleScope' } }
+                access_expires_at: { type: string, format: date-time }
+      responses:
+        '202':
+          description: Approval request created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApprovalRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/integrations:
+    get:
+      tags: [Admin]
+      operationId: listIntegrations
+      summary: Adapter mode (live/sandbox/mock) and health per provider
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    adapter: { type: string, enum: [bank, etims, crb, kyc, esign, sms, email, accounting, crm, mpesa, erp, ledger] }
+                    mode: { type: string, enum: [live, sandbox, mock] }
+                    provider: { type: string }
+                    healthy: { type: boolean }
+                    last_error_at: { type: [string, 'null'], format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/dashboards/summary:
+    get:
+      tags: [Reports and audit]
+      operationId: getDashboardSummary
+      summary: Get dashboard summary
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  float_cents: { $ref: '#/components/schemas/MoneyCents' }
+                  exposure_cents: { $ref: '#/components/schemas/MoneyCents' }
+                  float_utilisation_bps: { type: integer }
+                  fees_mtd_cents: { $ref: '#/components/schemas/MoneyCents' }
+                  losses_ytd_cents: { $ref: '#/components/schemas/MoneyCents' }
+                  median_hours_to_payout: { type: number }
+                  active_suppliers_per_buyer:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        buyer_id: { type: string, format: uuid }
+                        count: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/reports:
+    post:
+      tags: [Reports and audit]
+      operationId: runReport
+      summary: Generate CBK return, lender portfolio report, CRB submission file or audit export
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, period_start, period_end]
+              properties:
+                type: { type: string, enum: [cbk_return, lender_portfolio, crb_submission, audit_export, loan_tape] }
+                period_start: { type: string, format: date }
+                period_end: { type: string, format: date }
+                lender_fund_id: { type: string, format: uuid }
+      responses:
+        '202':
+          description: Report job queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportJob' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/reports/{reportId}:
+    parameters:
+      - { name: reportId, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Reports and audit]
+      operationId: getReport
+      summary: Get report
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReportJob' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/audit-events:
+    get:
+      tags: [Reports and audit]
+      operationId: listAuditEvents
+      summary: List audit events
+      parameters:
+        - { name: entity_type, in: query, schema: { type: string } }
+        - { name: entity_id, in: query, schema: { type: string } }
+        - { name: actor_user_id, in: query, schema: { type: string, format: uuid } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/AuditEvent' } }
+                  next_cursor: { type: [string, 'null'] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/webhooks/bank:
+    post:
+      tags: [Webhooks]
+      operationId: bankWebhook
+      summary: Incoming credits and payout status from partner bank (signature/mTLS verified; idempotent on bank_ref)
+      security: [ { webhookSignature: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BankWebhookEvent' }
+      responses:
+        '204': { description: Accepted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/webhooks/esign:
+    post:
+      tags: [Webhooks]
+      operationId: esignWebhook
+      summary: Esign webhook
+      security: [ { webhookSignature: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [envelope_id, status]
+              properties:
+                envelope_id: { type: string }
+                status: { type: string, enum: [sent, viewed, signed, completed, declined, expired] }
+                signer_ref: { type: string }
+      responses:
+        '204': { description: Accepted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/webhooks/kyc:
+    post:
+      tags: [Webhooks]
+      operationId: kycWebhook
+      summary: Kyc webhook
+      security: [ { webhookSignature: [] } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider_ref, result]
+              properties:
+                provider_ref: { type: string }
+                result: { type: string, enum: [pass, fail, review, error] }
+      responses:
+        '204': { description: Accepted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+components:
+  securitySchemes:
+    oidc:
+      type: openIdConnect
+      openIdConnectUrl: https://auth.mapema.co.ke/realms/mapema/.well-known/openid-configuration
+    webhookSignature:
+      type: apiKey
+      in: header
+      name: X-Signature
+      description: HMAC-SHA256 of raw body with per-provider secret, plus timestamp header; or mTLS where the bank supports it.
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 16, maxLength: 128 }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+    OrgId:
+      name: orgId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    InvoiceId:
+      name: invoiceId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AdvanceId:
+      name: advanceId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ApprovalId:
+      name: approvalId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    Unauthorized:
+      description: Not authenticated, MFA incomplete, or STEP_UP_REQUIRED
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: Role not permitted
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Not found (also returned for resources outside caller's scope)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: State conflict
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unprocessable:
+      description: Validation failed (e.g. MONEY_NOT_INTEGER_CENTS, CURRENCY_NOT_SUPPORTED, CONSENT_REQUIRED)
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    TooManyRequests:
+      description: Rate limited
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    MoneyCents:
+      type: integer
+      format: int64
+      minimum: 0
+      description: KES amount in integer cents (KES 1.00 = 100).
+    Currency:
+      type: string
+      const: KES
+    Bps:
+      type: integer
+      minimum: 0
+      maximum: 10000
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        code: { type: string, examples: [LIMIT_EXCEEDED, SAME_USER_AS_MAKER, DUPLICATE_INVOICE, CURRENCY_NOT_SUPPORTED] }
+        instance: { type: string }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field: { type: string }
+              message: { type: string }
+    OrgType:
+      type: string
+      enum: [buyer, supplier]
+    InvoiceStatus:
+      type: string
+      enum: [draft, awaiting_confirmation, confirmed, on_hold, rejected, ilu_signed, eligible, advance_requested, funded, settled, disputed, cancelled]
+    AdvanceStatus:
+      type: string
+      enum: [requested, approved, released, funded, settled, late, recourse, non_performing, written_off, declined, release_failed, cancelled]
+    ApprovalStatus:
+      type: string
+      enum: [pending, approved, rejected, expired, cancelled]
+    PayoutStatus:
+      type: string
+      enum: [proposed, approved, released, confirmed, failed, returned, cancelled]
+    DocType:
+      type: string
+      enum: [certificate_of_incorporation, cr12, kra_pin_certificate, board_resolution, national_id, passport, selfie, bank_proof, audited_accounts, programme_agreement, master_agreement, deed_of_assignment, ilu, notice_of_assignment, invoice_pdf, invoice_csv, credit_report, demand_letter, receipt, statement, fee_invoice, cbk_approval_letter, audit_export, other]
+    ConsentPurpose:
+      type: string
+      enum: [crb_enquiry_and_reporting, data_sharing_with_buyer, marketing, cross_border_transfer]
+    Role:
+      type: string
+      enum: [buyer_admin, buyer_maker, buyer_checker, supplier_admin, supplier_user, credit, ops, compliance, admin, ceo, auditor, lender]
+    RoleScope:
+      type: object
+      required: [role]
+      properties:
+        role: { $ref: '#/components/schemas/Role' }
+        org_id: { type: [string, 'null'], format: uuid }
+    Me:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        mfa_level: { type: string, enum: [none, mfa, mfa-stepup] }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        display_name: { type: string }
+        mfa_enabled: { type: boolean }
+        roles: { type: array, items: { $ref: '#/components/schemas/RoleScope' } }
+        access_expires_at: { type: [string, 'null'], format: date-time }
+        active: { type: boolean }
+    InvitationCreate:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [buyer_admin, buyer_user, supplier, supplier_user, staff, auditor] }
+        org_id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        phone: { type: string, pattern: '^\+254[17][0-9]{8}$' }
+        supplier_kra_pin: { type: string, pattern: '^[A-Z][0-9]{9}[A-Z]$' }
+        roles: { type: array, items: { $ref: '#/components/schemas/Role' } }
+    Invitation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string }
+        expires_at: { type: string, format: date-time }
+        status: { type: string, enum: [sent, accepted, expired, revoked] }
+    LeadCreate:
+      type: object
+      required: [company_name, contact_name, email, consent_to_contact]
+      properties:
+        company_name: { type: string }
+        contact_name: { type: string }
+        role: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        spend_band: { type: string, enum: ['<50M', '50M-200M', '200M-1B', '>1B'] }
+        sector_code: { type: string }
+        consent_to_contact: { type: boolean, const: true }
+        captcha_token: { type: string }
+    Organisation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/OrgType' }
+        legal_name: { type: string }
+        trading_name: { type: [string, 'null'] }
+        kra_pin: { type: string }
+        registration_no: { type: string }
+        sector_code: { type: [string, 'null'] }
+        status: { type: string }
+        dispute_freeze: { type: boolean }
+        fineract_client_id: { type: [integer, 'null'] }
+    OrganisationCreate:
+      type: object
+      required: [type, legal_name, kra_pin, registration_no]
+      properties:
+        type: { $ref: '#/components/schemas/OrgType' }
+        legal_name: { type: string }
+        kra_pin: { type: string, pattern: '^[A-Z][0-9]{9}[A-Z]$' }
+        registration_no: { type: string }
+        sector_code: { type: string }
+    OrganisationUpdate:
+      type: object
+      properties:
+        legal_name: { type: string }
+        trading_name: { type: string }
+        sector_code: { type: string }
+        address: { type: object }
+    Person:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        full_name: { type: string }
+        national_id_masked: { type: string, examples: ['****5678'] }
+        phone_masked: { type: string }
+        email: { type: string }
+        is_director: { type: boolean }
+        is_beneficial_owner: { type: boolean }
+        is_authorised_signatory: { type: boolean }
+    PersonCreate:
+      type: object
+      required: [full_name]
+      properties:
+        full_name: { type: string }
+        id_document_type: { type: string, enum: [national_id, passport, alien_id] }
+        national_id: { type: string, writeOnly: true, description: 'Encrypted at rest; never returned' }
+        date_of_birth: { type: string, format: date, writeOnly: true }
+        phone: { type: string, writeOnly: true }
+        email: { type: string, format: email }
+        is_director: { type: boolean }
+        is_beneficial_owner: { type: boolean }
+        is_authorised_signatory: { type: boolean }
+    BankAccount:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        bank_code: { type: string }
+        account_name: { type: string }
+        account_number_last4: { type: string }
+        currency: { $ref: '#/components/schemas/Currency' }
+        verified: { type: boolean }
+        cooling_off_until: { type: [string, 'null'], format: date-time }
+        is_payout_default: { type: boolean }
+    BankAccountCreate:
+      type: object
+      required: [bank_code, account_name, account_number, currency, proof_document_id]
+      properties:
+        bank_code: { type: string }
+        branch_code: { type: string }
+        account_name: { type: string }
+        account_number: { type: string, writeOnly: true }
+        currency: { $ref: '#/components/schemas/Currency' }
+        proof_document_id: { type: string, format: uuid }
+    CollectionAccount:
+      type: object
+      properties:
+        bank_code: { type: string }
+        virtual_account_no: { type: string }
+        reference_format: { type: string, examples: ['INV-{invoice_number}'] }
+    Document:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/DocType' }
+        file_name: { type: string }
+        sha256: { type: string }
+        scan_status: { type: string, enum: [pending, clean, infected, error] }
+        signed_at: { type: [string, 'null'], format: date-time }
+        download_url: { type: [string, 'null'], format: uri, description: 'Short-lived (5 min); only when scan_status=clean' }
+    KycCheck:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        check_type: { type: string }
+        provider: { type: string }
+        result: { type: string, enum: [pending, pass, fail, review, error] }
+        checked_at: { type: string, format: date-time }
+    Consent:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        purpose: { $ref: '#/components/schemas/ConsentPurpose' }
+        text_version: { type: string }
+        granted_at: { type: string, format: date-time }
+        withdrawn_at: { type: [string, 'null'], format: date-time }
+    CreditCheck:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        bureau: { type: string }
+        score: { type: [integer, 'null'] }
+        bureau_ref: { type: string }
+        report_document_id: { type: string, format: uuid }
+        pulled_at: { type: string, format: date-time }
+    BuyerProgrammeCreate:
+      type: object
+      required: [buyer_id, pricing_version_id, advance_rate_bps, limit_cents, start_date, review_date, rationale]
+      properties:
+        buyer_id: { type: string, format: uuid }
+        pricing_version_id: { type: string, format: uuid }
+        advance_rate_bps: { $ref: '#/components/schemas/Bps' }
+        limit_cents: { $ref: '#/components/schemas/MoneyCents' }
+        start_date: { type: string, format: date }
+        review_date: { type: string, format: date }
+        rationale: { type: string }
+    BuyerProgramme:
+      allOf:
+        - $ref: '#/components/schemas/BuyerProgrammeCreate'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            status: { type: string, enum: [proposed, approved, live, suspended, closed] }
+            exposure_cents: { $ref: '#/components/schemas/MoneyCents' }
+            headroom_cents: { $ref: '#/components/schemas/MoneyCents' }
+    SupplierLink:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        buyer_id: { type: string, format: uuid }
+        supplier_id: { type: string, format: uuid }
+        supplier_limit_cents: { $ref: '#/components/schemas/MoneyCents' }
+        status: { type: string, enum: [invited, joined, active, suspended, ended] }
+    LimitsOverview:
+      type: object
+      properties:
+        float_cents: { $ref: '#/components/schemas/MoneyCents' }
+        defaults:
+          type: object
+          properties:
+            buyer_pct_bps: { $ref: '#/components/schemas/Bps' }
+            supplier_pct_bps: { $ref: '#/components/schemas/Bps' }
+            sector_pct_bps: { $ref: '#/components/schemas/Bps' }
+        exposures:
+          type: array
+          items:
+            type: object
+            properties:
+              subject: { type: string, enum: [buyer, supplier, sector] }
+              subject_id: { type: string }
+              limit_cents: { $ref: '#/components/schemas/MoneyCents' }
+              exposure_cents: { $ref: '#/components/schemas/MoneyCents' }
+              headroom_cents: { $ref: '#/components/schemas/MoneyCents' }
+    LimitConfigChange:
+      type: object
+      required: [subject, reason]
+      properties:
+        subject: { type: string, enum: [buyer, supplier, sector] }
+        subject_org_id: { type: [string, 'null'], format: uuid }
+        subject_sector_code: { type: [string, 'null'] }
+        pct_of_float_bps: { $ref: '#/components/schemas/Bps' }
+        absolute_cap_cents: { $ref: '#/components/schemas/MoneyCents' }
+        review_date: { type: string, format: date }
+        reason: { type: string }
+    InvoiceCreate:
+      type: object
+      required: [supplier_id, buyer_id, invoice_number, issue_date, due_date, amount_cents, currency]
+      properties:
+        supplier_id: { type: string, format: uuid }
+        buyer_id: { type: string, format: uuid }
+        invoice_number: { type: string, maxLength: 64 }
+        etims_cu_invoice_no: { type: string }
+        issue_date: { type: string, format: date }
+        due_date: { type: string, format: date }
+        amount_cents: { $ref: '#/components/schemas/MoneyCents' }
+        currency: { $ref: '#/components/schemas/Currency' }
+        po_reference: { type: string }
+        pdf_document_id: { type: string, format: uuid }
+    Invoice:
+      allOf:
+        - $ref: '#/components/schemas/InvoiceCreate'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            status: { $ref: '#/components/schemas/InvoiceStatus' }
+            etims_status: { type: string, enum: [pending, valid, invalid, unavailable, overridden] }
+            confirmation_id: { type: [string, 'null'], format: uuid }
+            eligibility_reasons: { type: array, items: { type: string } }
+    Confirmation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        invoice_ids: { type: array, items: { type: string, format: uuid } }
+        total_confirmed_cents: { $ref: '#/components/schemas/MoneyCents' }
+        set_off_waiver: { type: boolean }
+        signing_url: { type: [string, 'null'], format: uri }
+        status: { type: string, enum: [pending_signature, signed, declined, expired] }
+        ilu_document_id: { type: [string, 'null'], format: uuid }
+    PriceBreakdown:
+      type: object
+      required: [invoice_amount_cents, days, advance_cents, discount_fee_cents, verification_fee_cents, total_cost_cents, mapema_keeps_cents, supplier_balance_cents, apr_bps]
+      properties:
+        invoice_amount_cents: { $ref: '#/components/schemas/MoneyCents' }
+        days: { type: integer }
+        advance_rate_bps: { $ref: '#/components/schemas/Bps' }
+        discount_rate_bps_per_30d: { $ref: '#/components/schemas/Bps' }
+        advance_cents: { $ref: '#/components/schemas/MoneyCents' }
+        discount_fee_cents: { $ref: '#/components/schemas/MoneyCents' }
+        verification_fee_cents: { $ref: '#/components/schemas/MoneyCents' }
+        total_cost_cents: { $ref: '#/components/schemas/MoneyCents' }
+        mapema_keeps_cents: { $ref: '#/components/schemas/MoneyCents' }
+        supplier_balance_cents: { $ref: '#/components/schemas/MoneyCents' }
+        apr_bps: { type: integer, description: 'Simple annualised total cost of credit, display only; method to be confirmed with counsel' }
+        pricing_version_code: { type: string }
+    PriceDisclosure:
+      allOf:
+        - $ref: '#/components/schemas/PriceBreakdown'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            invoice_id: { type: string, format: uuid }
+            quote_date: { type: string, format: date }
+            due_date: { type: string, format: date }
+            terms_version: { type: string }
+            kid_version: { type: string }
+            expires_at: { type: string, format: date-time }
+            fee_note: { type: string, examples: ['Fee is charged for actual days outstanding; the amount shown is the maximum.'] }
+    Advance:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        invoice_id: { type: string, format: uuid }
+        supplier_id: { type: string, format: uuid }
+        buyer_id: { type: string, format: uuid }
+        principal_cents: { $ref: '#/components/schemas/MoneyCents' }
+        discount_fee_cents: { $ref: '#/components/schemas/MoneyCents' }
+        verification_fee_cents: { $ref: '#/components/schemas/MoneyCents' }
+        status: { $ref: '#/components/schemas/AdvanceStatus' }
+        fineract_loan_id: { type: [integer, 'null'] }
+        disbursed_at: { type: [string, 'null'], format: date-time }
+    AdvanceDetail:
+      allOf:
+        - $ref: '#/components/schemas/Advance'
+        - type: object
+          properties:
+            disclosure: { $ref: '#/components/schemas/PriceDisclosure' }
+            checks: { $ref: '#/components/schemas/CheckResults' }
+            payouts: { type: array, items: { $ref: '#/components/schemas/Payout' } }
+            ledger:
+              type: object
+              description: Read live from Fineract
+              properties:
+                principal_outstanding_cents: { $ref: '#/components/schemas/MoneyCents' }
+                fees_outstanding_cents: { $ref: '#/components/schemas/MoneyCents' }
+                interest_outstanding_cents: { $ref: '#/components/schemas/MoneyCents' }
+                as_of: { type: string, format: date-time }
+    CheckResults:
+      type: object
+      properties:
+        all_passed: { type: boolean }
+        checks:
+          type: array
+          items:
+            type: object
+            required: [code, passed]
+            properties:
+              code: { type: string, enum: [ETIMS_VALID, ILU_SIGNED, NO_DUPLICATE, BUYER_LIMIT, SUPPLIER_LIMIT, SECTOR_LIMIT, FLOAT_AVAILABLE, NO_OPEN_DISPUTE, PARTIES_ACTIVE, KYC_CURRENT, SANCTIONS_CLEAR, PAYOUT_ACCOUNT_VERIFIED, DISCLOSURE_ACCEPTED, PROGRAMME_IN_REVIEW_DATE, LEDGER_PRICE_MATCH] }
+              passed: { type: boolean }
+              detail: { type: string }
+    ApprovalRequest:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        action: { type: string }
+        entity_type: { type: string }
+        entity_id: { type: string, format: uuid }
+        payload: { type: object }
+        required_role: { $ref: '#/components/schemas/Role' }
+        maker_id: { type: string, format: uuid }
+        checker_id: { type: [string, 'null'], format: uuid }
+        status: { $ref: '#/components/schemas/ApprovalStatus' }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+    Payout:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        advance_id: { type: string, format: uuid }
+        type: { type: string, enum: [advance, balance, refund] }
+        amount_cents: { $ref: '#/components/schemas/MoneyCents' }
+        currency: { $ref: '#/components/schemas/Currency' }
+        status: { $ref: '#/components/schemas/PayoutStatus' }
+        bank_ref: { type: [string, 'null'] }
+        released_by: { type: [string, 'null'], format: uuid }
+        approved_by: { type: [string, 'null'], format: uuid }
+    Allocation:
+      type: object
+      properties:
+        advance_id: { type: string, format: uuid }
+        principal_cents: { $ref: '#/components/schemas/MoneyCents' }
+        fees_charges_cents: { $ref: '#/components/schemas/MoneyCents' }
+        interest_cents: { $ref: '#/components/schemas/MoneyCents' }
+        supplier_balance_cents: { $ref: '#/components/schemas/MoneyCents' }
+    Payment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        bank_ref: { type: string }
+        amount_cents: { $ref: '#/components/schemas/MoneyCents' }
+        received_at: { type: string, format: date-time }
+        buyer_id: { type: [string, 'null'], format: uuid }
+        match_method: { type: [string, 'null'], enum: [auto_reference, auto_amount, auto_sum, manual, null] }
+        allocations: { type: array, items: { $ref: '#/components/schemas/Allocation' } }
+        unapplied_cents: { $ref: '#/components/schemas/MoneyCents' }
+    Dispute:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        invoice_id: { type: string, format: uuid }
+        buyer_id: { type: string, format: uuid }
+        reason_code: { type: string }
+        status: { type: string, enum: [open, investigating, resolved, withdrawn] }
+        opened_at: { type: string, format: date-time }
+    Complaint:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        category: { type: string }
+        status: { type: string }
+        ack_due_at: { type: string, format: date-time }
+        resolve_due_at: { type: string, format: date-time }
+    DataSubjectRequest:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string }
+        status: { type: string }
+        due_at: { type: string, format: date-time }
+    ReconciliationRun:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        as_of_date: { type: string, format: date }
+        bank_balance_cents: { type: integer, format: int64 }
+        fineract_cash_cents: { type: integer, format: int64 }
+        platform_cash_cents: { type: integer, format: int64 }
+        status: { type: string, enum: [balanced, breaks, error] }
+        breaks:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string, format: uuid }
+              kind: { type: string }
+              difference_cents: { type: integer, format: int64 }
+              status: { type: string }
+    PricingVersionCreate:
+      type: object
+      required: [code, advance_rate_bps, discount_rate_bps_per_30d, verification_fee_cents]
+      properties:
+        code: { type: string }
+        advance_rate_bps: { $ref: '#/components/schemas/Bps' }
+        discount_rate_bps_per_30d: { $ref: '#/components/schemas/Bps' }
+        verification_fee_cents: { $ref: '#/components/schemas/MoneyCents' }
+        rounding_rule: { type: string, enum: [half_up_cent, half_up_shilling], default: half_up_cent }
+        min_days: { type: integer, minimum: 1 }
+        max_days: { type: integer, maximum: 365 }
+    PricingVersion:
+      allOf:
+        - $ref: '#/components/schemas/PricingVersionCreate'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            status: { type: string, enum: [draft, pending_cbk, approved, scheduled, active, retired] }
+            cbk_approval_ref: { type: [string, 'null'] }
+            customer_notice_sent_at: { type: [string, 'null'], format: date-time }
+            effective_from: { type: [string, 'null'], format: date }
+    ReportJob:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string }
+        status: { type: string, enum: [queued, running, completed, failed] }
+        document_id: { type: [string, 'null'], format: uuid }
+        sha256: { type: [string, 'null'] }
+    AuditEvent:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        occurred_at: { type: string, format: date-time }
+        actor_user_id: { type: [string, 'null'], format: uuid }
+        action: { type: string }
+        entity_type: { type: string }
+        entity_id: { type: [string, 'null'] }
+        before: { type: [object, 'null'] }
+        after: { type: [object, 'null'] }
+        ip: { type: [string, 'null'] }
+        row_hash: { type: string }
+    BankWebhookEvent:
+      type: object
+      required: [event_type, bank_ref, amount_cents, currency, value_date]
+      properties:
+        event_type: { type: string, enum: [credit_received, payout_confirmed, payout_failed, payout_returned] }
+        bank_ref: { type: string }
+        account_no: { type: string }
+        amount_cents: { $ref: '#/components/schemas/MoneyCents' }
+        currency: { $ref: '#/components/schemas/Currency' }
+        value_date: { type: string, format: date }
+        narrative: { type: string }
+        payer_name: { type: string }
+        payout_idempotency_key: { type: string }
