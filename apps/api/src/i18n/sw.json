@@ -1,0 +1,19 @@
+{
+  "_note": "Draft Swahili strings - must be reviewed by a native-speaking translator before go-live (SYS-06).",
+  "invite.supplier": "{buyer} amekualika kwenye Mapema ili ulipwe mapema kwa ankara zilizoidhinishwa. Jiunge: {link}",
+  "invite.user": "Umealikwa kwenye Mapema. Fungua akaunti yako: {link}",
+  "invoice.eligible": "Ankara {invoice} kutoka {buyer} imethibitishwa. Sasa unaweza kuomba malipo ya mapema.",
+  "advance.approved": "Malipo ya awali kwa ankara {invoice} yameidhinishwa, yanasubiri kutolewa.",
+  "advance.funded": "Mapema imetuma {amount} kwa ankara {invoice} kwenye akaunti yako inayoishia {last4}. Kumb. {ref}.",
+  "advance.release_failed": "Hatukuweza kulipa ankara {invoice}: {reason}. Timu yetu itawasiliana nawe.",
+  "notice.assignment": "Taarifa ya uhamisho: ankara {invoice} ({amount}) kutoka {supplier} imehamishiwa Mapema. Lipa kiasi chote tarehe {due} kwenye akaunti {account}.",
+  "payment.receipt.buyer": "Risiti: tumepokea {amount} tarehe {date} kwa ankara {invoice}. Asante.",
+  "settlement.balance_proposed": "Mnunuzi wako amelipa ankara {invoice}. Salio lako la {amount} linatolewa leo.",
+  "payout.balance_sent": "Mapema imetuma salio lako la {amount} kwa ankara {invoice}. Kumb. {ref}.",
+  "late.d1_reminder": "Kumbukumbu: ankara {invoice} ({amount}) ilitakiwa kulipwa tarehe {due}. Tafadhali lipa kwenye akaunti {account}.",
+  "complaint.ack": "Tumepokea malalamiko yako {ref}. Tutajibu kufikia {due}.",
+  "dispute.opened": "Mnunuzi amewasilisha mgogoro kuhusu ankara {invoice}. Kagua kwenye lango la wafanyakazi.",
+  "dsr.received": "Ombi jipya la mhusika wa data {ref}. Muda wa kisheria unaendelea.",
+  "recon.break": "Ulinganisho wa hesabu wa {date} una tofauti. Kagua kabla ya kutoa malipo.",
+  "advance.recourse": "Ankara {invoice} sasa iko chini ya urejeshaji. Tafadhali wasiliana na Mapema."
+}

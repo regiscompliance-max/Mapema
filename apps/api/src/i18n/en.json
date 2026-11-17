@@ -1,0 +1,18 @@
+{
+  "invite.supplier": "{buyer} has invited you to Mapema to get paid early on approved invoices. Join: {link}",
+  "invite.user": "You have been invited to Mapema. Set up your account: {link}",
+  "invoice.eligible": "Invoice {invoice} from {buyer} is confirmed. You can now request early payment.",
+  "advance.approved": "Advance for invoice {invoice} approved, awaiting release.",
+  "advance.funded": "Mapema has sent {amount} for invoice {invoice} to your account ending {last4}. Ref {ref}.",
+  "advance.release_failed": "We could not pay out invoice {invoice}: {reason}. Our team will contact you.",
+  "notice.assignment": "Notice of assignment: invoice {invoice} ({amount}) from {supplier} has been assigned to Mapema. Pay the full amount on {due} into account {account}.",
+  "payment.receipt.buyer": "Receipt: we received {amount} on {date} for invoice {invoice}. Thank you.",
+  "settlement.balance_proposed": "Your buyer paid invoice {invoice}. Your balance of {amount} is being released today.",
+  "payout.balance_sent": "Mapema has sent your balance of {amount} for invoice {invoice}. Ref {ref}.",
+  "late.d1_reminder": "Reminder: invoice {invoice} ({amount}) was due on {due}. Please pay into account {account}.",
+  "complaint.ack": "We have received your complaint {ref}. We will respond by {due}.",
+  "dispute.opened": "A buyer has raised a dispute on invoice {invoice}. Review it in the staff portal.",
+  "dsr.received": "New data subject request {ref}. Statutory clock is running.",
+  "recon.break": "Reconciliation for {date} has breaks. Review before releasing payouts.",
+  "advance.recourse": "Invoice {invoice} is now under recourse. Please contact Mapema."
+}
