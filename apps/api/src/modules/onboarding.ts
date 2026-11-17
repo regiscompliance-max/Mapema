@@ -54,6 +54,12 @@ export class OnboardingService implements OnModuleInit {
       const l = (await c.query(`SELECT supplier_id FROM supplier_link WHERE id = $1`, [a.entity_id])).rows[0];
       await this.maybeActivateSupplier(c, l.supplier_id);
     });
+    this.approvals.register('user_role_change', async (c, a) => {
+      const inv = (await c.query(`UPDATE invitation SET approved_via = $2 WHERE id = $1 AND requires_approval AND approved_via IS NULL RETURNING id, link_enc`, [a.entity_id, a.id])).rows[0];
+      if (!inv) throw conflict('BAD_STATE', 'Invitation is not waiting for approval');
+      await this.outbox.enqueue(c, 'invitation.send', inv.id, `invite-${inv.id}`, { invitationId: inv.id, linkEnc: Buffer.from(inv.link_enc).toString('base64'), buyerId: null });
+      await c.query(`UPDATE invitation SET link_enc = NULL WHERE id = $1`, [inv.id]);
+    });
     this.approvals.register('bank_account_verify', async (c, a) => {
       await c.query(`UPDATE bank_account SET verified_at = now(), verified_by = $2 WHERE id = $1`, [a.entity_id, a.maker_id]);
     });
@@ -251,10 +257,19 @@ export class OnboardingService implements OnModuleInit {
       await c.query(`UPDATE invitation SET role_to_grant = $2, access_expires_at = $3, buyer_id = $4 WHERE id = $1`, [inv.id, b.role ?? null, b.accessExpiresAt ?? null, buyerId]);
       await this.audit.record(c, u.actor, 'invitation.create', 'invitation', inv.id, null, { kind: b.kind, orgId, email: b.email.replace(/^(.).*(@.*)$/, '$1***$2') });
       const link = `${this.cfg.WEB_ORIGIN}/join?token=${token}`;
-      // the link carries the raw token: it is stored encrypted in the outbox and scrubbed once sent
-      await this.outbox.enqueue(c, 'invitation.send', inv.id, `invite-${inv.id}`, { invitationId: inv.id, linkEnc: this.crypto.encrypt(link)!.toString('base64'), buyerId });
+      let approvalId: string | undefined;
+      if (b.kind === 'staff' || b.kind === 'auditor') {
+        // ADM-01: a staff/auditor role grant needs a second person; the link is held encrypted until then
+        await c.query(`UPDATE invitation SET requires_approval = true, link_enc = $2 WHERE id = $1`, [inv.id, this.crypto.encrypt(link)]);
+        approvalId = (await this.approvals.propose(c, u, { action: 'user_role_change', entityType: 'invitation', entityId: inv.id,
+          payload: { kind: b.kind, role: b.role ?? 'auditor', email: b.email.replace(/^(.).*(@.*)$/, '$1***$2'), accessExpiresAt: b.accessExpiresAt ?? null },
+          requiredRole: hasRole(u, 'ceo') ? 'admin' : 'ceo', reason: `Grant ${b.role ?? 'auditor'} access` })).id;
+      } else {
+        // the link carries the raw token: it is stored encrypted in the outbox and scrubbed once sent
+        await this.outbox.enqueue(c, 'invitation.send', inv.id, `invite-${inv.id}`, { invitationId: inv.id, linkEnc: this.crypto.encrypt(link)!.toString('base64'), buyerId });
+      }
       // the raw token is only returned outside production (dev/test convenience); in production it only travels by email/SMS
-      return { id: inv.id, expiresAt: inv.expires_at, orgId, ...(this.cfg.APP_ENV !== 'production' ? { devToken: token } : {}) };
+      return { id: inv.id, expiresAt: inv.expires_at, orgId, approvalId, ...(this.cfg.APP_ENV !== 'production' ? { devToken: token } : {}) };
     });
   }
 
@@ -266,6 +281,7 @@ export class OnboardingService implements OnModuleInit {
       const inv = (await c.query(`SELECT * FROM invitation WHERE token_sha256 = $1 FOR UPDATE`, [FieldCrypto.sha256(b.token)])).rows[0];
       if (!inv || inv.revoked_at || inv.accepted_at || new Date(inv.expires_at) < new Date()) throw new DomainError(410, 'INVITATION_INVALID', 'This invitation link is invalid or has expired');
       if (inv.email && email && inv.email.toLowerCase() !== email.toLowerCase()) throw forbidden('EMAIL_MISMATCH', 'Sign in with the email address the invitation was sent to');
+      if (inv.requires_approval && !inv.approved_via) throw forbidden('INVITATION_NOT_APPROVED', 'This access has not been approved by a second person yet');
       const meta = { role: inv.role_to_grant as Role | null, accessExpiresAt: inv.access_expires_at as string | null };
       let personId: string | null = null;
       if (inv.org_id) {

@@ -6,19 +6,20 @@ import { useT } from '../lang';
 import { Msg, StatusPill, Table, Tabs, useAction, useGet } from '../ui';
 import { Complaints } from './supplier';
 
-export function BuyerPortal({ roles }: { roles: string[] }) {
+export function BuyerPortal({ roles, orgId }: { roles: string[]; orgId: string }) {
   const t = useT();
   const [tab, setTab] = useState('invoices');
   const checker = roles.some((r) => r === 'buyer_checker' || r === 'buyer_admin');
   return (
     <div>
       <Tabs active={tab} onChange={setTab} tabs={[{ id: 'invoices', label: t('buyer.title') }, { id: 'new', label: t('buyer.new') }, ...(checker ? [{ id: 'confirm', label: 'Confirm & sign ILU' }] : []),
-        { id: 'calendar', label: t('buyer.calendar') }, { id: 'suppliers', label: t('buyer.invite') }, { id: 'help', label: t('footer.complaints') }]} />
+        { id: 'calendar', label: t('buyer.calendar') }, { id: 'suppliers', label: t('buyer.invite') }, ...(roles.includes('buyer_admin') ? [{ id: 'users', label: 'Users' }] : []), { id: 'help', label: t('footer.complaints') }]} />
       {tab === 'invoices' && <AllInvoices />}
       {tab === 'new' && <NewInvoice />}
       {tab === 'confirm' && <Confirm />}
       {tab === 'calendar' && <Calendar />}
       {tab === 'suppliers' && <Invite />}
+      {tab === 'users' && <Users orgId={orgId} />}
       {tab === 'help' && <Complaints />}
     </div>
   );
@@ -99,6 +100,21 @@ function Invite() {
       <input name="name" required placeholder="Supplier legal name" className="input" /><input name="pin" required placeholder="KRA PIN" className="input" />
       <input name="reg" required placeholder="Registration number" className="input" /><input name="email" type="email" required placeholder="Finance contact email" className="input" />
       <input name="phone" placeholder="+2547…" className="input" /><button className="btn" disabled={busy}>Send invitation</button>
+      <div className="sm:col-span-2"><Msg msg={msg} /></div>
+    </form>
+  );
+}
+
+/** BUY-04: buyer admin adds makers (upload invoices) and checkers (approve, sign ILUs). */
+function Users({ orgId }: { orgId: string }) {
+  const { busy, msg, run } = useAction();
+  const submit = (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
+    void run((tok) => api('/invitations', { token: tok, body: { kind: 'buyer_user', orgId, email: f.email, role: f.role } }), 'Invitation sent'); };
+  return (
+    <form onSubmit={submit} className="card grid gap-3 sm:grid-cols-2">
+      <input name="email" type="email" required placeholder="Colleague's work email" className="input" />
+      <select name="role" className="input"><option value="buyer_maker">Maker - adds invoices</option><option value="buyer_checker">Checker - approves invoices and signs ILUs</option></select>
+      <button className="btn sm:col-span-2" disabled={busy}>Invite user</button>
       <div className="sm:col-span-2"><Msg msg={msg} /></div>
     </form>
   );

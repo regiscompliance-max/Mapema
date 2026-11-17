@@ -76,6 +76,7 @@ describe('authorisation (RBAC + org scoping)', () => {
   });
   it('invitation tokens are single-use and email-bound', async () => {
     const i = await w.ops.post('/invitations', { kind: 'auditor', email: 'ext@audit.test', accessExpiresAt: new Date(Date.now() + 864e5).toISOString() });
+    await w.approve(i.approvalId); // staff/auditor role grants are maker-checker (ADM-01)
     const wrong = await h.token('x:wrong', { email: 'someone@else.test' });
     expect((await h.http.post('/v1/invitations/accept').set('Authorization', `Bearer ${wrong}`).send({ token: i.devToken, displayName: 'X' })).status).toBe(403);
     const ok = await h.token('x:audit', { email: 'ext@audit.test' });
@@ -86,6 +87,20 @@ describe('authorisation (RBAC + org scoping)', () => {
 });
 
 describe('maker-checker / four-eyes', () => {
+  it('staff and auditor role grants need a second person before the invitation works (ADM-01)', async () => {
+    const i = await w.admin.post('/invitations', { kind: 'staff', role: 'credit', email: 'new.credit@mapema.test' });
+    expect(i.approvalId).toBeTruthy();
+    const tok = await h.token('x:newcredit', { email: 'new.credit@mapema.test' });
+    const early = await h.http.post('/v1/invitations/accept').set('Authorization', `Bearer ${tok}`).send({ token: i.devToken, displayName: 'New Credit' });
+    expect(early.status).toBe(403);
+    expect(early.body.title).toBe('INVITATION_NOT_APPROVED');
+    expect((await w.admin.post(`/approvals/${i.approvalId}/approve`, {}, 403)).title).toBe('FOUR_EYES');
+    await w.approve(i.approvalId); // CEO
+    await h.http.post('/v1/invitations/accept').set('Authorization', `Bearer ${tok}`).send({ token: i.devToken, displayName: 'New Credit' }).expect(201);
+    const me = await client(h, () => Promise.resolve(tok)).get('/me');
+    expect(me.roles.map((r: any) => r.role)).toEqual(['credit']);
+  });
+
   it('nobody approves their own request (service + DB constraint)', async () => {
     const pa = await w.ops.post('/organisations', { type: 'buyer', legalName: 'Beta Ltd', kraPin: 'P052222222C', registrationNo: 'PVT-BETA01', sectorCode: 'MFG' });
     const acct = await w.ops.post(`/organisations/${pa.id}/bank-accounts`, { bankCode: '01', accountName: 'Beta', accountNumber: '5566778899' }).catch(() => null);
