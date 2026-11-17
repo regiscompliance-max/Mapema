@@ -22,6 +22,9 @@ const TAGS = {
   admin: ['Admin', 'Settings, adapters, lending switch, pricing versions with CBK approval reference, float, limits.'],
   ops: ['Operations', 'Late ladder, recourse, collections, disputes, complaints, data-subject requests, AML review, reconciliation, funding.'],
   reports: ['Reports and audit', 'Current user, dashboard, portfolio, hash-chained audit log, export, Fineract trial balance.'],
+  'credit-reviews': ['Credit reviews', 'CRD-07 review-date and KYC-expiry reminders as credit tasks (30/7/0 days).'],
+  'self-service': ['Documents and self-service', 'Org-scoped document list/download (notices, receipts, uploads), buyer programme utilisation, consents, my-data view, staff user list.'],
+  'session.controller': ['Session', 'Browser sign-in: exchange an IdP token for an httpOnly session cookie; CSRF token; logout.'],
   dev: ['Development only', 'Mounted only when DEV_IDP_ENABLED=true and APP_ENV is development or test. Never in staging or production.'],
 };
 const SUMMARIES = {
@@ -38,9 +41,10 @@ const SUMMARIES = {
 };
 
 const ops = [];
-for (const f of readdirSync(dir).filter((x) => x.endsWith('.ts'))) {
-  const mod = f.replace('.ts', '');
-  const src = readFileSync(join(dir, f), 'utf8');
+const files = [...readdirSync(dir).filter((x) => x.endsWith('.ts')).map((f) => join(dir, f)), join(root, 'apps/api/src/auth/session.controller.ts')];
+for (const file of files) {
+  const mod = file.split('/').pop().replace('.ts', '');
+  const src = readFileSync(file, 'utf8');
   const lines = src.split('\n');
   let prefix = null, classPublic = false, classRoles = null, pending = [];
   for (let i = 0; i < lines.length; i++) {
@@ -132,15 +136,19 @@ for (const o of ops.sort((a, b) => a.path.localeCompare(b.path))) {
 const used = [...new Set(ops.map((o) => o.mod))].filter((m) => TAGS[m]);
 const doc = {
   openapi: '3.1.0',
-  info: { title: 'Mapema Platform API (as implemented, Phase 1)', version: '1.0.0-phase1',
+  info: { title: 'Mapema Platform API (as implemented, Phase 1b)', version: '1.1.0-phase1b',
     description: 'Generated from the NestJS controllers by scripts/gen-openapi.mjs. Money: KES integer cents (strings in JSON). Errors: RFC 9457 problem+json; `title` is a stable error code. All users need MFA; money movements need step-up and maker-checker. Phase 0 design contract: openapi/phase-0-design.yaml (differences are listed in docs/phase-1/README).',
     contact: { name: 'Mapema engineering' }, license: { name: 'Proprietary - Mapema Limited, all rights reserved', identifier: 'LicenseRef-Mapema-Proprietary' } },
   servers: [{ url: 'https://api.staging.mapema.example', description: 'Staging placeholder (not deployed in Phase 1); locally http://localhost:4000' }],
-  security: [{ bearer: [] }],
+  security: [{ bearer: [] }, { session: [], csrf: [] }],
   tags: used.map((m) => ({ name: TAGS[m][0], description: TAGS[m][1] })),
   paths,
   components: {
-    securitySchemes: { bearer: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT', description: 'OIDC access token (Keycloak in staging/production; dev IdP locally). amr must include an MFA factor.' } },
+    securitySchemes: {
+      bearer: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT', description: 'API clients: OIDC access token (Keycloak in staging/production; dev IdP locally). amr must include an MFA factor. Not ambient, so no CSRF header.' },
+      session: { type: 'apiKey', in: 'cookie', name: 'mapema_sid', description: 'Browser: opaque session id set by POST /v1/auth/session (HttpOnly, Secure, SameSite=Strict). Idle 15 min, absolute 8 h.' },
+      csrf: { type: 'apiKey', in: 'header', name: 'X-CSRF-Token', description: 'Required with the session cookie on POST/PUT/PATCH/DELETE, together with an allowed Origin. Value from POST/GET /v1/auth/session.' },
+    },
     parameters: { IdempotencyKey: { name: 'Idempotency-Key', in: 'header', required: true, schema: { type: 'string', minLength: 8, maxLength: 128 } } },
     responses: { Problem: { description: 'Error (problem+json)', content: { 'application/problem+json': { schema: { $ref: '#/components/schemas/Problem' } } } } },
     schemas: {
