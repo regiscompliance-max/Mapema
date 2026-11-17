@@ -4,21 +4,30 @@
  * verification fee. Buyer pays the full invoice on the due date.
  * Expected: advance 800,000.00; interest 44,800.00; fee 2,500.00; supplier balance 152,700.00;
  * repayment applied principal -> fees -> interest; balance released by ops; reconciliation balanced.
- * Ledger: MockLedger here (same product semantics); the real-Fineract proof is in
- * packages/adapters/test/fineract.live.test.ts.
+ * Ledger: MockLedger by default. With E2E_LEDGER=fineract the SAME test runs against a real
+ * Apache Fineract (npm run test:e2e:fineract); dates then move into the past because Fineract
+ * rejects future-dated transactions, and GL checks compare deltas (the tenant is shared).
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Harness, startHarness } from './harness';
-import { AT, buildWorld, eligibleInvoice, fund, seedFunding, World, WORKED } from './world';
+import { AT, buildWorld, eligibleInvoice, fund, LEDGER_ENV, REAL_LEDGER, seedFunding, World, WORKED } from './world';
 
 let h: Harness; let w: World;
-beforeAll(async () => { h = await startHarness(); w = await buildWorld(h); await seedFunding(h, w, 1_000_000_000n); });
+let gl0: Record<string, bigint> = {};
+beforeAll(async () => {
+  h = await startHarness(LEDGER_ENV);
+  gl0 = await h.adapters.ledger.trialBalance();
+  w = await buildWorld(h);
+  await seedFunding(h, w, 1_000_000_000n);
+});
+const delta = async (k: string) => ((await h.adapters.ledger.trialBalance()) as Record<string, bigint>)[k] - (gl0[k] ?? 0n);
 afterAll(async () => { await h?.close(); });
 
-describe('TC-E2E-01 worked example KES 1,000,000 / 48 days', () => {
+describe(`TC-E2E-01 worked example KES 1,000,000 / 48 days [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
   let invoiceId: string; let advanceId: string;
 
   it('quotes exactly the worked example and stores the full disclosure', async () => {
+    expect(h.adapters.ledger.mode).toBe(REAL_LEDGER ? 'sandbox' : 'mock');
     invoiceId = await eligibleInvoice(h, w, { number: 'INV-2027-0001', amountCents: WORKED.invoiceCents, dueDate: WORKED.dueDate });
     const q = await w.supplier.post(`/invoices/${invoiceId}/quote`);
     expect(q).toMatchObject({
@@ -67,17 +76,20 @@ describe('TC-E2E-01 worked example KES 1,000,000 / 48 days', () => {
   });
 
   it('three-way reconciliation balances; ledger trial balance sums to zero; income = 44,800 + 2,500', async () => {
-    const run = await w.ops.post(`/reconciliation/run?date=${WORKED.dueDate}`);
-    expect(run.status).toBe('balanced');
-    expect(run.bank_balance_cents).toBe('1004730000');
-    expect(run.fineract_cash_cents).toBe('1004730000');
-    expect(run.platform_cash_cents).toBe('1004730000');
     const tb = await w.auditor.get('/ledger/trial-balance');
     expect(tb.balanced).toBe(true);
-    expect(tb.accounts.interestIncome).toBe('-4480000');
-    expect(tb.accounts.feeIncome).toBe('-250000');
-    expect(tb.accounts.loanPortfolio).toBe('0');
-    expect(tb.accounts.supplierPayable).toBe('0');
+    expect(await delta('bank')).toBe(1_004_730_000n);
+    expect(await delta('interestIncome')).toBe(-4_480_000n);
+    expect(await delta('feeIncome')).toBe(-250_000n);
+    expect(await delta('loanPortfolio')).toBe(0n);
+    expect(await delta('supplierPayable')).toBe(0n);
+    if (!REAL_LEDGER) { // a shared real tenant carries other runs' balances, so the absolute three-way match is mock-only
+      const run = await w.ops.post(`/reconciliation/run?date=${WORKED.dueDate}`);
+      expect(run.status).toBe('balanced');
+      expect(run.bank_balance_cents).toBe('1004730000');
+      expect(run.fineract_cash_cents).toBe('1004730000');
+      expect(run.platform_cash_cents).toBe('1004730000');
+    }
   });
 
   it('notifications went out in order and the audit chain verifies', async () => {

@@ -100,28 +100,31 @@ export class PaymentsService implements OnModuleInit {
     const loan = await ledger.getLoan(loanId);
     let rep = { transactionId: 0, principalCents: 0n, feesCents: 0n, penaltiesCents: 0n, interestCents: 0n, overpaymentCents: 0n, amountCents: 0n };
     let expected: ReturnType<typeof allocate> | null = null;
+    let ledgerOverpaid = 0n;
     if (loan.totalOutstandingCents > 0n) {
       let post: Cents;
-      let dues = { principalCents: loan.principalOutstandingCents, feesCents: loan.feesOutstandingCents + loan.penaltiesOutstandingCents, interestCents: loan.interestOutstandingCents };
+      // amounts due AS OF the value date (a plain loan read can show the scheduled, not the accrued, interest)
+      const payoff = await ledger.payoffQuote(loanId, date);
+      const dues = { principalCents: payoff.principalCents, feesCents: payoff.feesCents, interestCents: payoff.interestCents };
       if (date >= a.due_date) {
-        post = remaining < loan.totalOutstandingCents ? remaining : loan.totalOutstandingCents;
-      } else {
-        const payoff = await ledger.payoffQuote(loanId, date);
-        dues = { principalCents: payoff.principalCents, feesCents: payoff.feesCents, interestCents: payoff.interestCents };
-        if (remaining >= payoff.totalCents) post = payoff.totalCents;
-        else if (remaining <= payoff.principalCents) post = remaining;
-        else { post = payoff.principalCents; held = remaining - post; }
-      }
+        post = remaining < payoff.totalCents ? remaining : payoff.totalCents;
+      } else if (remaining >= payoff.totalCents) post = payoff.totalCents;
+      else if (remaining <= payoff.principalCents) post = remaining;
+      else { post = payoff.principalCents; held = remaining - post; }
       expected = allocate(post, dues, 0n);
       rep = await ledger.repay(ctx, loanId, post, date, `pay-${paymentId}`);
+      if (rep.overpaymentCents > 0n) ledgerOverpaid = rep.overpaymentCents; // should never happen: payoff was read first
       remaining -= post + held;
     }
     const after = await ledger.getLoan(loanId);
     const closed = after.totalOutstandingCents === 0n;
     let supplierPortion = 0n;
     if (closed && remaining > 0n) {
-      const prevSupplier = toCents((await this.db.one(`SELECT COALESCE(SUM(supplier_balance_cents),0)::bigint AS s FROM payment_allocation WHERE advance_id = $1`, [a.id])).s);
-      const owed = toCents(a.invoice_amount_cents) - toCents(a.principal_cents) - toCents(a.verification_fee_cents) - after.interestChargedCents - prevSupplier;
+      // the loan is closed, so everything the ledger collected (earlier payments + this one) is the final cost
+      const prev = await this.db.one(`SELECT COALESCE(SUM(principal_cents + fees_charges_cents + interest_cents),0)::bigint AS loan, COALESCE(SUM(supplier_balance_cents),0)::bigint AS sup
+        FROM payment_allocation WHERE advance_id = $1`, [a.id]);
+      const loanCollected = toCents(prev.loan) + rep.principalCents + rep.feesCents + rep.penaltiesCents + rep.interestCents;
+      const owed = toCents(a.invoice_amount_cents) - loanCollected - toCents(prev.sup);
       supplierPortion = owed > 0n ? (remaining < owed ? remaining : owed) : 0n;
       remaining -= supplierPortion;
     }
@@ -139,6 +142,10 @@ export class PaymentsService implements OnModuleInit {
       await c.query(`UPDATE payment SET status = $2, held_cents = $3, unapplied_cents = $4 WHERE id = $1`, [paymentId, status, held, unapplied]);
       await c.query(`UPDATE advance SET mirror_principal_outstanding_cents = $2, mirror_fees_outstanding_cents = $3, mirror_interest_outstanding_cents = $4, mirror_refreshed_at = now(), updated_at = now() WHERE id = $1`,
         [a.id, after.principalOutstandingCents, after.feesOutstandingCents, after.interestOutstandingCents]);
+      if (ledgerOverpaid > 0n) {
+        const run = await this.reconRunFor(c, this.clock.today());
+        await c.query(`INSERT INTO reconciliation_break (run_id, kind, difference_cents, reference) VALUES ($1,'ledger_overpayment',$2,$3)`, [run, ledgerOverpaid, JSON.stringify({ paymentId })]);
+      }
       if (expected && (expected.principalCents !== rep.principalCents || expected.feesCents !== rep.feesCents + rep.penaltiesCents || expected.interestCents !== rep.interestCents)) {
         const run = await this.reconRunFor(c, this.clock.today());
         await c.query(`INSERT INTO reconciliation_break (run_id, kind, difference_cents, reference) VALUES ($1,'allocation_mismatch',$2,$3)`,

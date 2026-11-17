@@ -23,12 +23,13 @@ export interface Harness {
   app: INestApplication;
   http: ReturnType<typeof request>;
   admin: pg.Pool; // superuser pool on the test DB (fixtures + assertions only)
-  adapters: Adapters & { bank: MockBank; ledger: MockLedger; esign: MockEsign; sms: MockSms; email: MockEmail };
+  adapters: Adapters & { bank: MockBank; ledger: MockLedger & Adapters['ledger']; esign: MockEsign; sms: MockSms; email: MockEmail };
   clock: Clock;
   token: (sub: string, opts?: { email?: string; amr?: string[]; authAgeSec?: number }) => Promise<string>;
   staff: Record<string, { id: string; sub: string; token: () => Promise<string> }>;
   close: () => Promise<void>;
   dbName: string;
+  appUrl: string; // the API's own (least-privilege) connection string
 }
 
 function url(base: string, db: string, user?: string, pw?: string) {
@@ -75,7 +76,7 @@ export async function startHarness(extraEnv: Record<string, string> = {}): Promi
     staff[name] = { id: u.id, sub, token: () => token(sub, { email: `${name}@mapema.test` }) };
   }
   return {
-    app, http: request(app.getHttpServer()), admin, adapters, clock, token, staff, dbName,
+    app, http: request(app.getHttpServer()), admin, adapters, clock, token, staff, dbName, appUrl: env.DATABASE_URL,
     close: async () => {
       await app.close();
       await admin.end();

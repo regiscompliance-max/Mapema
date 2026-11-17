@@ -4,9 +4,17 @@
  * programme agreement (e-sign) -> supplier invitation, KYC, master agreement, bank call-back,
  * supplier limit -> invoice -> buyer maker-checker -> ILU e-sign -> eligible.
  */
+import { addDays, todayEAT } from '@mapema/pricing';
 import { client, Harness } from './harness';
 
-export const WORKED = { invoiceCents: 100_000_000n, days: 48, quoteDate: '2027-01-04', dueDate: '2027-02-21' };
+/** Real Fineract rejects future-dated transactions, so the real-ledger run uses past dates. */
+export const REAL_LEDGER = process.env.E2E_LEDGER === 'fineract';
+const QUOTE_DATE = REAL_LEDGER ? addDays(todayEAT(), -500) : '2027-01-04'; // scenarios span ~480 days
+export const WORKED = { invoiceCents: 100_000_000n, days: 48, quoteDate: QUOTE_DATE, dueDate: addDays(QUOTE_DATE, 48), issueDate: addDays(QUOTE_DATE, -2) };
+export const LEDGER_ENV: Record<string, string> = REAL_LEDGER
+  ? { ADAPTER_MODE_LEDGER: 'sandbox', FINERACT_BASE_URL: process.env.FINERACT_BASE_URL ?? 'http://localhost:8443/fineract-provider/api/v1', FINERACT_TENANT: 'default',
+      FINERACT_USERNAME: process.env.FINERACT_USERNAME ?? 'mifos', FINERACT_PASSWORD: process.env.FINERACT_PASSWORD ?? 'password' } // Fineract's documented local demo login
+  : { ADAPTER_MODE_LEDGER: 'mock' };
 export const AT = (date: string) => `${date}T07:00:00.000Z`; // 10:00 EAT
 
 export interface World {
@@ -45,7 +53,7 @@ export async function buildWorld(h: Harness, o: { floatCents?: bigint; supplierL
   await w.buyerAdmin.post('/consents', { orgId: buyer.id, purpose: 'crb_enquiry_and_reporting', textVersion: 'CRB-2026-11' });
   await w.buyerAdmin.post(`/organisations/${buyer.id}/submit`);
   await w.credit!.post(`/organisations/${buyer.id}/crb-pull`);
-  const prog = await w.credit!.post(`/organisations/${buyer.id}/programme`, { limitCents: '500000000', advanceRateBps: 8000, startDate: '2027-01-01', reviewDate: '2027-12-31', decisionReason: 'Strong CRB, 10y trading' });
+  const prog = await w.credit!.post(`/organisations/${buyer.id}/programme`, { limitCents: '500000000', advanceRateBps: 8000, startDate: WORKED.issueDate, reviewDate: addDays(WORKED.quoteDate, 365), decisionReason: 'Strong CRB, 10y trading' });
   await w.approve(prog.approval.id);
   const pe = await w.buyerAdmin.post(`/organisations/${buyer.id}/agreements`);
   await h.http.post(`/v1/dev/esign/${pe.envelopeId}/complete`).expect(201);
@@ -81,7 +89,7 @@ export async function buildWorld(h: Harness, o: { floatCents?: bigint; supplierL
 /** BUY-04/05 + ILU: an eligible invoice. */
 export async function eligibleInvoice(h: Harness, w: World, inv: { number: string; amountCents: bigint; issueDate?: string; dueDate: string }) {
   const i = await w.buyerAdmin.post('/invoices', { supplierKraPin: w.supplierKraPin, invoiceNumber: inv.number, amountCents: String(inv.amountCents), currency: 'KES',
-    issueDate: inv.issueDate ?? '2027-01-02', dueDate: inv.dueDate, etimsCuInvoiceNo: `KRACU${inv.number.replace(/\W/g, '')}` });
+    issueDate: inv.issueDate ?? WORKED.issueDate, dueDate: inv.dueDate, etimsCuInvoiceNo: `KRACU${inv.number.replace(/\W/g, '')}` });
   await w.buyerChecker.post(`/invoices/${i.id}/decision`, { decision: 'approve' });
   const conf = await w.buyerChecker.post('/confirmations', { invoiceIds: [i.id] });
   await h.http.post(`/v1/dev/esign/${conf.envelopeId}/complete`).expect(201);
@@ -100,5 +108,5 @@ export async function fund(h: Harness, w: World, invoiceId: string) {
 
 export async function seedFunding(h: Harness, w: World, cents: bigint, ref = 'EQ-0001') {
   await h.http.post('/v1/dev/bank/fund').send({ amountCents: String(cents) }).expect(201);
-  await w.ceo.post('/funding', { amountCents: String(cents), source: 'Founder equity', reference: ref, valueDate: '2027-01-04' });
+  await w.ceo.post('/funding', { amountCents: String(cents), source: 'Founder equity', reference: ref, valueDate: WORKED.quoteDate });
 }

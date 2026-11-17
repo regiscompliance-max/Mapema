@@ -215,6 +215,7 @@ export class AdvancesService implements OnModuleInit {
   // ------------------------------------------------------------------ credit decision (CRD-06/08)
   async decide(u: AuthUser, id: string, decision: 'approve' | 'decline', reason: string) {
     const r = await this.db.tx(async (c) => {
+      await c.query(`SELECT pg_advisory_xact_lock(hashtext('mapema.release'))`); // approvals reserve limit headroom too: serialise with releases
       const a0 = (await c.query(`SELECT * FROM advance WHERE id = $1 FOR UPDATE`, [id])).rows[0];
       if (!a0) throw notFound('Advance');
       if (a0.status !== 'requested') throw conflict('BAD_STATE', `Advance is ${a0.status}`);
