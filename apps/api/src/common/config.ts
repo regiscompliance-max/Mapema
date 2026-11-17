@@ -21,6 +21,7 @@ const schema = z.object({
   ESIGN_WEBHOOK_SECRET: z.string().min(16),
   STEP_UP_MAX_AGE_SEC: z.coerce.number().int().default(300),
   SESSION_IDLE_MINUTES: z.coerce.number().int().min(1).default(15),
+  RATE_LIMIT_STORE: z.enum(['postgres', 'memory']).default('postgres'),
   SESSION_MAX_HOURS: z.coerce.number().int().min(1).default(8),
   INVITE_TTL_HOURS: z.coerce.number().int().default(72),
   QUOTE_TTL_MINUTES: z.coerce.number().int().default(30),
