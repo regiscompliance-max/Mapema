@@ -7,7 +7,7 @@ export async function cbkStatus(): Promise<{ lendingEnabled: boolean; cbkLicence
     const r = await fetch(`${API_URL}/v1/public/cbk-status`, { next: { revalidate: 300 } });
     if (r.ok) return r.json();
   } catch { /* API unreachable at build time */ }
-  return { lendingEnabled: false, cbkLicenceNo: null, statement: 'Mapema has applied to the Central Bank of Kenya for a non-deposit-taking credit provider licence. We do not provide credit until the licence is granted.' };
+  return { lendingEnabled: false, cbkLicenceNo: null, statement: 'Mapema is not yet licensed by the Central Bank of Kenya as a non-deposit-taking credit provider. We do not provide credit until we are licensed.' };
 }
 
 export function Header({ lang }: { lang: Lang }) {

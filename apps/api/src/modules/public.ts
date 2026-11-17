@@ -55,7 +55,7 @@ export class PublicService {
     const l = await this.settings.lending();
     return { lendingEnabled: l.enabled, cbkLicenceNo: l.cbk_licence_no, statement: l.cbk_licence_no
       ? `Mapema is licensed by the Central Bank of Kenya as a non-deposit-taking credit provider, licence ${l.cbk_licence_no}.`
-      : 'Mapema has applied to the Central Bank of Kenya for a non-deposit-taking credit provider licence. We do not provide credit until the licence is granted.' };
+      : 'Mapema is not yet licensed by the Central Bank of Kenya as a non-deposit-taking credit provider. We do not provide credit until we are licensed.' };
   }
 }
 
