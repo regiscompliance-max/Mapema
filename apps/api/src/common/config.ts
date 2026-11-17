@@ -20,6 +20,8 @@ const schema = z.object({
   BANK_WEBHOOK_SECRET: z.string().min(16),
   ESIGN_WEBHOOK_SECRET: z.string().min(16),
   STEP_UP_MAX_AGE_SEC: z.coerce.number().int().default(300),
+  SESSION_IDLE_MINUTES: z.coerce.number().int().min(1).default(15),
+  SESSION_MAX_HOURS: z.coerce.number().int().min(1).default(8),
   INVITE_TTL_HOURS: z.coerce.number().int().default(72),
   QUOTE_TTL_MINUTES: z.coerce.number().int().default(30),
   BANK_ACCOUNT_COOLING_OFF_HOURS: z.coerce.number().int().default(24),

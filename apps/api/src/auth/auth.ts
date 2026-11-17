@@ -16,6 +16,7 @@ import { Db } from '../common/db';
 import { DomainError, forbidden } from '../common/errors';
 import { Actor } from '../common/audit';
 import { DevIdp } from './dev-idp';
+import { parseCookies, SAFE_METHODS, Sessions, SID_COOKIE } from './session';
 
 export type Role =
   | 'buyer_admin' | 'buyer_maker' | 'buyer_checker' | 'supplier_admin' | 'supplier_user'
@@ -90,30 +91,18 @@ export class TokenVerifier {
   }
 }
 
+/** Turns a verified identity (from a bearer token or a server-side session) into an AuthUser, enforcing MFA and account status. */
 @Injectable()
-export class AuthGuard implements CanActivate {
-  constructor(
-    private readonly reflector: Reflector,
-    private readonly db: Db,
-    @Inject(CONFIG) private readonly cfg: AppConfig,
-    private readonly verifier: TokenVerifier,
-  ) {}
-
-  async canActivate(ctx: ExecutionContext): Promise<boolean> {
-    const handler = ctx.getHandler();
-    const cls = ctx.getClass();
-    if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, [handler, cls])) return true;
-    const req = ctx.switchToHttp().getRequest();
-    const h: string | undefined = req.headers.authorization;
-    if (!h?.startsWith('Bearer ')) throw new DomainError(401, 'UNAUTHENTICATED', 'Sign in required');
-    const payload = await this.verifier.verify(h.slice(7));
-    const amr = Array.isArray(payload.amr) ? (payload.amr as string[]) : [];
+export class Identity {
+  constructor(private readonly db: Db) {}
+  async build(id: { sub: string; amr: string[]; authTime: number }, req: any): Promise<AuthUser> {
+    const amr = id.amr;
     if (!amr.some((m) => STRONG_FACTORS.includes(m) || m === 'sms')) {
       throw new DomainError(401, 'MFA_REQUIRED', 'Multi-factor sign-in is required');
     }
     const user = await this.db.one(
       `SELECT id, email, display_name, active, access_expires_at FROM user_account WHERE idp_subject = $1`,
-      [payload.sub],
+      [id.sub],
     );
     if (!user || !user.active) throw new DomainError(401, 'NO_ACCOUNT', 'No active Mapema account for this sign-in');
     if (user.access_expires_at && new Date(user.access_expires_at) < new Date()) {
@@ -129,13 +118,50 @@ export class AuthGuard implements CanActivate {
       displayName: user.display_name,
       roles: roles.map((r) => ({ role: r.role, orgId: r.org_id })),
       amr,
-      authTime: Number(payload.auth_time ?? payload.iat ?? 0),
+      authTime: id.authTime,
       actor: { userId: user.id, role: roles.map((r) => r.role).join(','), ip: req.ip, userAgent: req.headers['user-agent'], requestId: req.requestId },
     };
     const nonSupplier = authUser.roles.some((r) => !['supplier_admin', 'supplier_user'].includes(r.role));
     if (nonSupplier && !amr.some((m) => STRONG_FACTORS.includes(m))) {
       throw new DomainError(401, 'STRONG_MFA_REQUIRED', 'Staff, buyer and auditor users must use an authenticator app or security key');
     }
+    return authUser;
+  }
+}
+
+export function identityFromToken(payload: JWTPayload) {
+  return { sub: String(payload.sub ?? ''), amr: Array.isArray(payload.amr) ? (payload.amr as string[]) : [], authTime: Number(payload.auth_time ?? payload.iat ?? 0) };
+}
+
+@Injectable()
+export class AuthGuard implements CanActivate {
+  constructor(
+    private readonly reflector: Reflector,
+    @Inject(CONFIG) private readonly cfg: AppConfig,
+    private readonly verifier: TokenVerifier,
+    private readonly identity: Identity,
+    private readonly sessions: Sessions,
+  ) {}
+
+  async canActivate(ctx: ExecutionContext): Promise<boolean> {
+    const handler = ctx.getHandler();
+    const cls = ctx.getClass();
+    if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, [handler, cls])) return true;
+    const req = ctx.switchToHttp().getRequest();
+    const h: string | undefined = req.headers.authorization;
+    let id: { sub: string; amr: string[]; authTime: number };
+    if (h?.startsWith('Bearer ')) {
+      // API clients: bearer tokens are not ambient credentials, so no CSRF check
+      id = identityFromToken(await this.verifier.verify(h.slice(7)));
+    } else {
+      const sid = parseCookies(req.headers.cookie)[SID_COOKIE];
+      if (!sid) throw new DomainError(401, 'UNAUTHENTICATED', 'Sign in required');
+      const s = await this.sessions.resolve(sid);
+      if (!SAFE_METHODS.has(String(req.method).toUpperCase())) this.sessions.assertCsrf(req, sid);
+      req.sessionSid = sid;
+      id = { sub: s.idp_subject, amr: s.amr, authTime: Number(s.auth_time) };
+    }
+    const authUser = await this.identity.build(id, req);
     const required = this.reflector.getAllAndOverride<Role[] | undefined>(ROLES, [handler, cls]);
     if (required?.length && !hasRole(authUser, ...required)) {
       throw forbidden('ROLE_REQUIRED', `This action needs one of: ${required.join(', ')}`);

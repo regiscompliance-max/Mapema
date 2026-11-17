@@ -13,7 +13,9 @@ import { ProblemFilter } from './common/errors';
 import { Idempotency } from './common/idempotency';
 import { Notifier } from './common/notify';
 import { Outbox } from './common/outbox';
-import { AuthGuard, TokenVerifier } from './auth/auth';
+import { AuthGuard, Identity, TokenVerifier } from './auth/auth';
+import { Sessions } from './auth/session';
+import { AuthSessionController } from './auth/session.controller';
 import { DevIdp } from './auth/dev-idp';
 import { AdminController, SettingsService } from './modules/admin';
 import { AdvancesController, AdvancesService } from './modules/advances';
@@ -27,7 +29,7 @@ import { PaymentsController, PaymentsService } from './modules/payments';
 import { PublicController, PublicService } from './modules/public';
 import { ReportsController, ReportsService } from './modules/reports';
 
-export const CONTROLLERS = [PublicController, OnboardingController, InvoicesController, AdvancesController, PaymentsController, OpsController, ApprovalsController, AdminController, ReportsController];
+export const CONTROLLERS = [AuthSessionController, PublicController, OnboardingController, InvoicesController, AdvancesController, PaymentsController, OpsController, ApprovalsController, AdminController, ReportsController];
 
 export interface AppOverrides { adapters?: Adapters; storage?: StorageAdapter }
 
@@ -43,7 +45,7 @@ export class AppModule implements NestModule {
         { provide: CONFIG, useValue: cfg },
         { provide: ADAPTERS, useValue: o.adapters ?? createAdapters(cfg.raw) },
         { provide: STORAGE, useValue: o.storage ?? (cfg.APP_ENV === 'test' ? new MemoryStorage() : new LocalEncryptedStorage(cfg.STORAGE_DIR, cfg.STORAGE_ENCRYPTION_KEY)) },
-        Db, Clock, Audit, FieldCrypto, Outbox, Notifier, Idempotency, DevIdp, TokenVerifier,
+        Db, Clock, Audit, FieldCrypto, Outbox, Notifier, Idempotency, DevIdp, TokenVerifier, Identity, Sessions,
         ApprovalsService, SettingsService, DocumentsService, OnboardingService, InvoicesService, AdvancesService, PaymentsService, OpsService, ReportsService, PublicService,
         { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: APP_GUARD, useClass: AuthGuard },

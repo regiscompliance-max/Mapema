@@ -19,7 +19,7 @@ export async function createApp(cfg: AppConfig, o: AppOverrides = {}, opts: { lo
   app.disable('x-powered-by');
   app.use(helmet({ contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"] } }, hsts: { maxAge: 31536000, includeSubDomains: true } }));
   app.useBodyParser('json', { limit: '15mb' }); // documents arrive base64 (10 MB file limit enforced in DocumentsService)
-  app.enableCors({ origin: cfg.WEB_ORIGIN.split(','), credentials: false, allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key', 'X-Request-Id'] });
+  app.enableCors({ origin: cfg.WEB_ORIGIN.split(','), credentials: true, allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key', 'X-Request-Id', 'X-CSRF-Token'] });
   app.setGlobalPrefix('v1');
   app.enableShutdownHooks();
   if (cfg.DEV_IDP_ENABLED === 'true') await app.get(DevIdp).init();

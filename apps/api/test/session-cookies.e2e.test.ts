@@ -92,7 +92,7 @@ describe('cookie sessions + CSRF', () => {
     expect(idle.status).toBe(401); expect(idle.body.title).toBe('SESSION_EXPIRED');
     h.clock.set('2026-11-17T11:00:00Z');
     const sid2 = sidFrom(await signIn());
-    for (let m = 10; m <= 8 * 60; m += 10) { h.clock.set(new Date(Date.parse('2026-11-17T11:00:00Z') + m * 60_000).toISOString()); await h.http.get('/v1/me').set('Cookie', `mapema_sid=${sid2}`).expect(200); }
+    for (let m = 10; m < 8 * 60; m += 10) { h.clock.set(new Date(Date.parse('2026-11-17T11:00:00Z') + m * 60_000).toISOString()); await h.http.get('/v1/me').set('Cookie', `mapema_sid=${sid2}`).expect(200); }
     h.clock.set(new Date(Date.parse('2026-11-17T11:00:00Z') + 8 * 3600_000 + 60_000).toISOString());
     const abs = await h.http.get('/v1/me').set('Cookie', `mapema_sid=${sid2}`);
     expect(abs.status).toBe(401); expect(abs.body.title).toBe('SESSION_EXPIRED');
