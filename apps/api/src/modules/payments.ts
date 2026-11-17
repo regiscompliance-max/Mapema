@@ -25,6 +25,7 @@ import { Notifier } from '../common/notify';
 import { AuthUser, BUYER_ROLES, CurrentUser, hasRole, isStaff, orgIds, Public, Roles, StepUp, SUPPLIER_ROLES } from '../auth/auth';
 import { ApprovalsService } from './approvals';
 import { normaliseInvoiceNo } from './invoices';
+import { DocumentsService, simplePdf } from './documents';
 
 const OPEN = `('funded','late','recourse','non_performing')`;
 
@@ -37,6 +38,7 @@ export class PaymentsService implements OnModuleInit {
     private readonly notifier: Notifier,
     private readonly approvals: ApprovalsService,
     private readonly crypto: FieldCrypto,
+    private readonly docs: DocumentsService,
     @Inject(ADAPTERS) private readonly adapters: Adapters,
   ) {}
 
@@ -170,6 +172,17 @@ export class PaymentsService implements OnModuleInit {
         await this.notifier.toOrg(c, a.supplier_id, 'settlement.balance_proposed', { invoice: a.invoice_number, amount: formatKes(supplierPortion) }, { type: 'payout', id: payoutId! });
         await this.notifier.toRole(c, 'ops', 'settlement.balance_proposed', { invoice: a.invoice_number, amount: formatKes(supplierPortion) }, { type: 'payout', id: payoutId! });
       }
+      // BUY-12 downloadable receipt (an acknowledgement of money received - NOT a tax invoice; fee invoices wait on tax advice, C-21)
+      const buyerName = (await c.query(`SELECT legal_name FROM organisation WHERE id = $1`, [a.buyer_id])).rows[0]?.legal_name ?? '';
+      await this.docs.store(c, { ownerOrgId: a.buyer_id, type: 'receipt', fileName: `receipt-${p.bank_ref}.pdf`, mimeType: 'application/pdf', containsPii: false,
+        body: simplePdf('Mapema - payment receipt', [
+          `Received from: ${buyerName}`, `Amount: ${formatKes(toCents(p.amount_cents))}`, `Value date: ${date}`, `Bank reference: ${p.bank_ref}`, `Invoice: ${a.invoice_number}`, '',
+          `Applied to Mapema advance: ${formatKes(rep.principalCents + rep.feesCents + rep.penaltiesCents + rep.interestCents)}`,
+          `Passed to supplier (balance of invoice): ${formatKes(supplierPortion)}`,
+          ...(held > 0n ? [`Held until the due date ${a.due_date}: ${formatKes(held)}`] : []),
+          ...(unapplied > 0n ? [`Overpayment to be refunded: ${formatKes(unapplied)}`] : []),
+          '', 'This is an acknowledgement of payment received. It is not a tax invoice.',
+        ]) });
       await this.notifier.toOrg(c, a.buyer_id, 'payment.receipt.buyer', { amount: formatKes(toCents(p.amount_cents)), date, invoice: a.invoice_number }, { type: 'payment', id: paymentId });
       await this.audit.record(c, SYSTEM, 'payment.apply', 'payment', paymentId, { status: 'matched' }, {
         status, advanceId: a.id, ledgerTxn: rep.transactionId, principal: rep.principalCents, fees: rep.feesCents, interest: rep.interestCents, supplierBalance: supplierPortion, held, unapplied, settled: closed, payoutId,

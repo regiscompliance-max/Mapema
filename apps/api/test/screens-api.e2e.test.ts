@@ -70,7 +70,7 @@ describe('buyer programme utilisation (BUY-13)', () => {
     const p = await w.buyerAdmin.get('/buyer/programme');
     expect(p).toMatchObject({ limit_cents: '500000000', used_cents: '40000000', available_cents: '460000000', status: 'live' });
     expect(p.review_date).toBeTruthy();
-    expect(p.suppliers).toEqual([expect.objectContaining({ supplier_name: 'Jua Kali Distributors Ltd', exposure_cents: '40000000', open_advances: 1 })]);
+    expect(p.suppliers).toEqual([expect.objectContaining({ supplier_name: 'Jua Kali Packaging Ltd', exposure_cents: '40000000', open_advances: 1 })]);
     await w.supplier.get('/buyer/programme', 403);
   });
 });
@@ -91,13 +91,13 @@ describe('consents (SUP-03) and self-service data (SUP-13)', () => {
   it('TC-SUP-13 my data: profile, org, masked people, bank last 4, consents, counts; no raw IDs or full account numbers', async () => {
     const d = await w.supplier.get('/me/data');
     expect(d.profile.email).toBe('finance@juakali.test');
-    expect(d.organisations[0]).toMatchObject({ legal_name: 'Jua Kali Distributors Ltd' });
+    expect(d.organisations[0]).toMatchObject({ legal_name: 'Jua Kali Packaging Ltd' });
     expect(d.organisations[0].people.length).toBeGreaterThan(0);
-    expect(d.organisations[0].people[0].nationalIdMasked).toMatch(/\*/);
+    expect(d.organisations[0].people.find((p: any) => p.isDirector).nationalIdMasked).toMatch(/^•+\d{4}$/);
     expect(d.organisations[0].bankAccounts[0].account_number_last4).toMatch(/^\d{4}$/);
     expect(d.organisations[0].activity).toMatchObject({ invoices: expect.any(Number), advances: expect.any(Number) });
     expect(d.consents.length).toBeGreaterThan(0);
-    expect(d.rights).toMatch(/correction|deletion/i);
+    expect(d.rights).toMatch(/correct/i); expect(d.rights).toMatch(/delete/i);
     expect(JSON.stringify(d)).not.toMatch(/_enc|national_id"|account_number"/);
   });
 });
