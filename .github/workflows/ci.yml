@@ -1,0 +1,34 @@
+# [DevOps] CI. Written in Phase 1 but NOT run (no remote push allowed in Phase 1).
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci-only-postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 20
+    env:
+      TEST_DATABASE_ADMIN_URL: postgres://postgres:ci-only-postgres@localhost:5432/postgres
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm run lint:openapi
+      - run: npm test
+      - run: npm audit --omit=dev --audit-level=high
+  # Real-Fineract E2E (worked example + settlement scenarios) runs nightly against a Fineract service
+  # once a pinned image is agreed: E2E_LEDGER=fineract npm run test:e2e:fineract
