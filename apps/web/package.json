@@ -1,0 +1,26 @@
+{
+  "name": "@mapema/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mapema public site and portals (Next.js, mobile-first, English + Swahili-ready)",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mapema/pricing": "0.1.0",
+    "next": "16.4.6",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.5",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "postcss": "^8.5.0",
+    "tailwindcss": "^4.3.5"
+  }
+}
