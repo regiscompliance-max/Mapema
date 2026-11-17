@@ -27,10 +27,11 @@ import { InvoicesController, InvoicesService } from './modules/invoices';
 import { OnboardingController, OnboardingService } from './modules/onboarding';
 import { OpsController, OpsService } from './modules/ops';
 import { PaymentsController, PaymentsService } from './modules/payments';
+import { CreditReviewController, CreditReviewService } from './modules/credit-reviews';
 import { PublicController, PublicService } from './modules/public';
 import { ReportsController, ReportsService } from './modules/reports';
 
-export const CONTROLLERS = [AuthSessionController, PublicController, OnboardingController, InvoicesController, AdvancesController, PaymentsController, OpsController, ApprovalsController, AdminController, ReportsController];
+export const CONTROLLERS = [AuthSessionController, PublicController, OnboardingController, InvoicesController, AdvancesController, PaymentsController, CreditReviewController, OpsController, ApprovalsController, AdminController, ReportsController];
 
 export interface AppOverrides { adapters?: Adapters; storage?: StorageAdapter }
 
@@ -47,13 +48,13 @@ export class AppModule implements NestModule {
         { provide: ADAPTERS, useValue: o.adapters ?? createAdapters(cfg.raw) },
         { provide: STORAGE, useValue: o.storage ?? (cfg.APP_ENV === 'test' ? new MemoryStorage() : new LocalEncryptedStorage(cfg.STORAGE_DIR, cfg.STORAGE_ENCRYPTION_KEY)) },
         Db, Clock, Audit, FieldCrypto, Outbox, Notifier, Idempotency, DevIdp, TokenVerifier, Identity, Sessions,
-        ApprovalsService, SettingsService, DocumentsService, OnboardingService, InvoicesService, AdvancesService, PaymentsService, OpsService, ReportsService, PublicService,
+        ApprovalsService, SettingsService, DocumentsService, OnboardingService, InvoicesService, AdvancesService, PaymentsService, OpsService, ReportsService, PublicService, CreditReviewService,
         ...(cfg.RATE_LIMIT_STORE === 'postgres' ? [{ provide: ThrottlerStorage, useClass: PgThrottlerStorage }] : []),
         { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_FILTER, useClass: ProblemFilter },
       ],
-      exports: [Db, Clock, Outbox, PaymentsService, OpsService, AdvancesService, ADAPTERS],
+      exports: [Db, Clock, Outbox, PaymentsService, OpsService, AdvancesService, CreditReviewService, ADAPTERS],
     };
   }
 

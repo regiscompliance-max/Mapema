@@ -18,5 +18,6 @@
   "advance.recourse": "Ankara {invoice} sasa iko chini ya urejeshaji. Tafadhali wasiliana na Mapema.",
   "shortfall.opened.supplier": "Mnunuzi wako amelipa {paid} kwa ankara {invoice} ya {invoice_amount}. Mapema imelipwa; mnunuzi bado anadaiwa {amount} na wewe. Tafadhali fuatilia moja kwa moja - malipo yoyote zaidi atakayofanya kwenye akaunti ya makusanyo yatapelekwa kwako.",
   "shortfall.opened.buyer": "Ankara {invoice}: umelipa {paid} kati ya {invoice_amount}. Bado unadaiwa {amount} na msambazaji wako. Lipa kwenye akaunti yako ya kawaida ya makusanyo ukitaja {invoice}.",
-  "shortfall.settled.supplier": "Mnunuzi sasa amelipa salio lililobaki la ankara {invoice}. Hakuna kingine unachodaiwa kwa ankara hii."
+  "shortfall.settled.supplier": "Mnunuzi sasa amelipa salio lililobaki la ankara {invoice}. Hakuna kingine unachodaiwa kwa ankara hii.",
+  "credit.review_due": "Mapitio ya mkopo yanahitajika: {what} ya {org} inatakiwa tarehe {date} ({when}). Fungua Mapema > Mikopo > Kazi za mapitio."
 }

@@ -345,23 +345,25 @@ export class OnboardingService implements OnModuleInit {
     const ctx = ctxOf(u);
     const results: { check: string; result: string }[] = [];
     let anyFail = false; let anyReview = false;
+    // CRD-07: checks are valid for KYC_REFRESH_MONTHS (Mapema policy default, D-35); reminders at 30/7 days, excluded on expiry
+    const kycExpires = new Date(this.clock.now()); kycExpires.setUTCMonth(kycExpires.getUTCMonth() + this.cfg.KYC_REFRESH_MONTHS);
     await this.db.tx(async (c) => {
       const reg = await this.adapters.kyc.companyLookup(ctx, { registrationNo: org.registration_no, kraPin: org.kra_pin });
-      await c.query(`INSERT INTO kyc_check (subject_org_id, check_type, provider, provider_ref, result, details) VALUES ($1,'company_registry',$2,$3,$4,$5)`,
-        [orgId, this.adapters.kyc.mode, reg.providerRef, reg.result, JSON.stringify({ directors: reg.directors.length })]);
+      await c.query(`INSERT INTO kyc_check (subject_org_id, check_type, provider, provider_ref, result, details, expires_at) VALUES ($1,'company_registry',$2,$3,$4,$5,$6)`,
+        [orgId, this.adapters.kyc.mode, reg.providerRef, reg.result, JSON.stringify({ directors: reg.directors.length }), kycExpires]);
       results.push({ check: 'company_registry', result: reg.result });
       const orgSan = await this.adapters.kyc.sanctionsScreen(ctx, { name: org.legal_name, type: 'company' });
-      await c.query(`INSERT INTO kyc_check (subject_org_id, check_type, provider, provider_ref, result, details) VALUES ($1,'sanctions_pep',$2,$3,$4,$5)`,
-        [orgId, this.adapters.kyc.mode, orgSan.providerRef, orgSan.hit ? 'review' : 'pass', JSON.stringify({ lists: orgSan.lists })]);
+      await c.query(`INSERT INTO kyc_check (subject_org_id, check_type, provider, provider_ref, result, details, expires_at) VALUES ($1,'sanctions_pep',$2,$3,$4,$5,$6)`,
+        [orgId, this.adapters.kyc.mode, orgSan.providerRef, orgSan.hit ? 'review' : 'pass', JSON.stringify({ lists: orgSan.lists }), kycExpires]);
       if (orgSan.hit) { anyReview = true; await c.query(`INSERT INTO aml_flag (org_id, entity_type, entity_id, rule_code) VALUES ($1,'organisation',$1,'SANCTIONS_HIT')`, [orgId]); }
       if (reg.result === 'fail') anyFail = true;
       for (const p of persons) {
         const idr = await this.adapters.kyc.verifyId(ctx, { idNumber: this.crypto.decrypt(p.national_id_enc) ?? '', fullName: p.full_name });
-        await c.query(`INSERT INTO kyc_check (subject_person_id, check_type, provider, provider_ref, result, details) VALUES ($1,'id_verification',$2,$3,$4,$5)`,
-          [p.id, this.adapters.kyc.mode, idr.providerRef, idr.result, JSON.stringify({ reasons: idr.reasons })]);
+        await c.query(`INSERT INTO kyc_check (subject_person_id, check_type, provider, provider_ref, result, details, expires_at) VALUES ($1,'id_verification',$2,$3,$4,$5,$6)`,
+          [p.id, this.adapters.kyc.mode, idr.providerRef, idr.result, JSON.stringify({ reasons: idr.reasons }), kycExpires]);
         const san = await this.adapters.kyc.sanctionsScreen(ctx, { name: p.full_name, type: 'individual' });
-        await c.query(`INSERT INTO kyc_check (subject_person_id, check_type, provider, provider_ref, result, details) VALUES ($1,'sanctions_pep',$2,$3,$4,$5)`,
-          [p.id, this.adapters.kyc.mode, san.providerRef, san.hit ? 'review' : 'pass', JSON.stringify({ lists: san.lists })]);
+        await c.query(`INSERT INTO kyc_check (subject_person_id, check_type, provider, provider_ref, result, details, expires_at) VALUES ($1,'sanctions_pep',$2,$3,$4,$5,$6)`,
+          [p.id, this.adapters.kyc.mode, san.providerRef, san.hit ? 'review' : 'pass', JSON.stringify({ lists: san.lists }), kycExpires]);
         if (san.hit) { anyReview = true; await c.query(`INSERT INTO aml_flag (org_id, entity_type, entity_id, rule_code) VALUES ($1,'person',$2,'SANCTIONS_HIT')`, [orgId, p.id]); }
         if (idr.result === 'fail') anyFail = true;
         if (idr.result === 'review') anyReview = true;

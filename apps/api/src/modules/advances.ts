@@ -24,6 +24,7 @@ import { Notifier } from '../common/notify';
 import { Outbox } from '../common/outbox';
 import { AuthUser, CurrentUser, hasRole, isStaff, orgIds, Roles, StepUp, SUPPLIER_ROLES } from '../auth/auth';
 import { ApprovalsService } from './approvals';
+import { kycExpiry } from './credit-reviews';
 import { SettingsService } from './admin';
 import { DocumentsService, simplePdf } from './documents';
 import { TERMS_VERSION } from './onboarding';
@@ -140,7 +141,7 @@ export class AdvancesService implements OnModuleInit {
     const adv = (await q.query(
       `SELECT a.*, i.etims_status, i.invoice_number, i.supplier_kra_pin, i.amount_cents AS invoice_amount_cents, i.issue_date, i.due_date AS invoice_due_date,
               b.status AS buyer_status, b.dispute_freeze, b.sector_id, s.status AS supplier_status, l.status AS link_status, l.supplier_limit_cents,
-              bp.limit_cents AS programme_limit_cents, bp.status AS programme_status,
+              bp.limit_cents AS programme_limit_cents, bp.status AS programme_status, bp.review_date AS programme_review_date,
               (SELECT signed_at FROM confirmation c JOIN confirmation_invoice ci ON ci.confirmation_id = c.id WHERE ci.invoice_id = a.invoice_id) AS ilu_signed_at
        FROM advance a JOIN invoice i ON i.id = a.invoice_id JOIN organisation b ON b.id = a.buyer_id JOIN organisation s ON s.id = a.supplier_id
        LEFT JOIN supplier_link l ON l.buyer_id = a.buyer_id AND l.supplier_id = a.supplier_id
@@ -162,6 +163,15 @@ export class AdvancesService implements OnModuleInit {
     const ba = (await q.query(`SELECT verified_at, cooling_off_until FROM bank_account WHERE org_id = $1 AND is_payout_default AND deactivated_at IS NULL`, [adv.supplier_id])).rows[0];
     const baOk = Boolean(ba?.verified_at) && (!ba.cooling_off_until || new Date(ba.cooling_off_until) <= this.clock.now());
     checks.push({ code: 'PAYOUT_ACCOUNT_VERIFIED', ok: baOk, detail: !ba ? 'no account' : !ba.verified_at ? 'not verified by call-back' : baOk ? 'verified' : 'in cooling-off after change' });
+    // CRD-07: a party past its review date or KYC expiry is excluded from new advances
+    const today = this.clock.today();
+    const lr = (await q.query(`SELECT MIN(review_date) AS d FROM limit_config WHERE active AND subject IN ('buyer','supplier') AND subject_org_id IN ($1,$2) AND review_date IS NOT NULL`, [adv.buyer_id, adv.supplier_id])).rows[0]?.d as string | null;
+    const reviewIssues = [adv.programme_review_date && adv.programme_review_date <= today ? `programme review was due ${adv.programme_review_date}` : null, lr && lr <= today ? `limit review was due ${lr}` : null].filter(Boolean);
+    checks.push({ code: 'PROGRAMME_IN_REVIEW_DATE', ok: reviewIssues.length === 0, detail: reviewIssues.length ? reviewIssues.join('; ') : `programme review ${adv.programme_review_date ?? 'n/a'}` });
+    const now = this.clock.now();
+    const kycS = await kycExpiry(q, adv.supplier_id); const kycB = await kycExpiry(q, adv.buyer_id);
+    const kycIssues = [kycS && kycS <= now ? `supplier KYC expired ${kycS.toISOString().slice(0, 10)}` : null, kycB && kycB <= now ? `buyer KYB expired ${kycB.toISOString().slice(0, 10)}` : null].filter(Boolean);
+    checks.push({ code: 'KYC_CURRENT', ok: kycIssues.length === 0, detail: kycIssues.length ? kycIssues.join('; ') : 'current' });
     const days = daysBetween(this.clock.today(), adv.due_date);
     checks.push({ code: 'DUE_DATE_AHEAD', ok: days >= 1, detail: `${days} days to due date` });
     checks.push(...(await this.limitChecks(q, adv)));

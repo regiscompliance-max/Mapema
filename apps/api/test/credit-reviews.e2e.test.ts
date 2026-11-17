@@ -49,7 +49,7 @@ describe('CRD-07 review-date reminders', () => {
     const lr = addDays(D0, 60);
     await h.admin.query(`INSERT INTO mapema.limit_config (subject, subject_org_id, absolute_cap_cents, review_date) VALUES ('supplier', $1, 50000000000, $2)`, [w.supplierId, lr]);
     const kx = addDays(D0, 70);
-    await h.admin.query(`UPDATE mapema.kyc_check SET expires_at = $2 WHERE subject_org_id = $1 OR subject_person_id IN (SELECT id FROM mapema.person WHERE org_id = $1)`, [w.supplierId, `${kx}T21:00:00Z`]);
+    await h.admin.query(`UPDATE mapema.kyc_check SET expires_at = $2 WHERE subject_org_id = $1 OR subject_person_id IN (SELECT id FROM mapema.person WHERE org_id = $1)`, [w.supplierId, `${kx}T09:00:00Z`]);
     await runOn(addDays(D0, 41));
     const t = await tasks();
     expect(t.find((x) => x.kind === 'limit_review' && x.org_id === w.supplierId)).toMatchObject({ threshold_days: 30, due_date: lr });
@@ -62,9 +62,9 @@ describe('CRD-07 review-date reminders', () => {
     const d = await w.credit.post(`/credit/tasks/${t.id}/done`, { note: 'Limit reviewed with updated management accounts' });
     expect(d.status).toBe('done');
     expect((await tasks()).some((x) => x.id === t.id)).toBe(false);
-    await w.supplier.get('/credit/tasks', undefined, 403);
-    await w.buyerAdmin.get('/credit/tasks', undefined, 403);
-    await w.ops.get('/credit/tasks', undefined, 403);
+    await w.supplier.get('/credit/tasks', 403);
+    await w.buyerAdmin.get('/credit/tasks', 403);
+    await w.ops.get('/credit/tasks', 403);
     const ev = (await w.auditor.get('/audit/events?limit=100')).find((e: any) => e.action === 'credit_task.done' && e.entity_id === t.id);
     expect(ev).toBeTruthy();
   });
@@ -75,7 +75,7 @@ describe('CRD-07 review-date reminders', () => {
     h.clock.set(AT(R));
     const inv = await eligibleInvoice(h, w, { number: 'INV-RV-01', amountCents: 10_000_000n, issueDate: addDays(R, -1), dueDate: addDays(R, 40) });
     const q = await w.supplier.post(`/invoices/${inv}/quote`);
-    const acc = await w.supplier.post('/advances', { disclosureIds: [q.disclosureId], acceptTerms: true }, undefined, { 'Idempotency-Key': 'rv-01' });
+    const acc = await w.supplier.post('/advances', { disclosureIds: [q.disclosureId], acceptTerms: true }, undefined, { 'Idempotency-Key': 'review-test-01' });
     const r = await w.credit.post(`/advances/${acc.advances[0].advanceId}/decision`, { decision: 'approve', reason: 'x' }, 422);
     expect(r.failedChecks.map((c: any) => c.code)).toContain('PROGRAMME_IN_REVIEW_DATE');
     expect(r.failedChecks.map((c: any) => c.code)).not.toContain('KYC_CURRENT');
@@ -92,7 +92,7 @@ describe('CRD-07 review-date reminders', () => {
     h.clock.set(AT(addDays(kx, 1)));
     const inv = await eligibleInvoice(h, w, { number: 'INV-RV-02', amountCents: 10_000_000n, issueDate: kx, dueDate: addDays(kx, 40) });
     const q = await w.supplier.post(`/invoices/${inv}/quote`);
-    const acc = await w.supplier.post('/advances', { disclosureIds: [q.disclosureId], acceptTerms: true }, undefined, { 'Idempotency-Key': 'rv-02' });
+    const acc = await w.supplier.post('/advances', { disclosureIds: [q.disclosureId], acceptTerms: true }, undefined, { 'Idempotency-Key': 'review-test-02' });
     const r = await w.credit.post(`/advances/${acc.advances[0].advanceId}/decision`, { decision: 'approve', reason: 'x' }, 422);
     expect(r.failedChecks.map((c: any) => c.code)).toEqual(['KYC_CURRENT']);
   });

@@ -17,5 +17,6 @@
   "advance.recourse": "Invoice {invoice} is now under recourse. Please contact Mapema.",
   "shortfall.opened.supplier": "Your buyer paid {paid} against invoice {invoice} of {invoice_amount}. Mapema has been repaid; {amount} is still owed to you by the buyer. Please follow up with them directly - any further payment they make to the collection account will be passed to you.",
   "shortfall.opened.buyer": "Invoice {invoice}: you have paid {paid} of {invoice_amount}. {amount} is still owed to your supplier. Pay it to your usual collection account quoting {invoice}.",
-  "shortfall.settled.supplier": "The buyer has now paid the remaining balance on invoice {invoice}. Nothing more is owed to you on it."
+  "shortfall.settled.supplier": "The buyer has now paid the remaining balance on invoice {invoice}. Nothing more is owed to you on it.",
+  "credit.review_due": "Credit review needed: {what} for {org} is due on {date} ({when}). Open Mapema > Credit > Review tasks."
 }

@@ -7,3 +7,4 @@ export * from './common/outbox';
 export * from './modules/payments';
 export * from './modules/ops';
 export * from './modules/advances';
+export * from './modules/credit-reviews';

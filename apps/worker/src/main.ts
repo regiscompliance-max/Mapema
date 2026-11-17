@@ -4,12 +4,13 @@
  *  - every 5 min: poll bank payout statuses
  *  - daily 00:15 EAT: post held remainders whose due date has arrived (CBK-order posting policy)
  *  - daily 06:00 EAT: late-payment ladder; 06:30 EAT: three-way reconciliation for the previous day
+ *  - daily 07:00 EAT: CRD-07 review-date / KYC-expiry reminders (credit tasks at 30, 7 and 0 days)
  * Only one worker runs jobs at a time (Postgres advisory lock), so scaling out is safe.
  */
 import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { AdvancesService, AppModule, Clock, Db, loadConfig, OpsService, Outbox, PaymentsService } from '@mapema/api';
+import { AdvancesService, AppModule, Clock, CreditReviewService, Db, loadConfig, OpsService, Outbox, PaymentsService } from '@mapema/api';
 import { addDays } from '@mapema/pricing';
 
 const log = new Logger('Worker');
@@ -33,13 +34,14 @@ async function main() {
   const cfg = loadConfig();
   const ctx = await NestFactory.createApplicationContext(AppModule.forRoot(cfg), { logger: ['error', 'warn', 'log'] });
   const db = ctx.get(Db); const outbox = ctx.get(Outbox); const clock = ctx.get(Clock);
-  const payments = ctx.get(PaymentsService); const ops = ctx.get(OpsService); const advances = ctx.get(AdvancesService);
+  const payments = ctx.get(PaymentsService); const ops = ctx.get(OpsService); const advances = ctx.get(AdvancesService); const reviews = ctx.get(CreditReviewService);
   const jobs: Job[] = [
     { name: 'outbox', everyMs: 5_000, run: () => outbox.processDue(50) },
     { name: 'payout-status', everyMs: 300_000, run: () => advances.refreshPayoutStatuses() },
     { name: 'held-remainders', at: '00:15', run: () => payments.postHeld(clock.today()) },
     { name: 'late-ladder', at: '06:00', run: () => ops.runLateLadder(clock.today()) },
     { name: 'reconciliation', at: '06:30', run: () => ops.reconcile(addDays(clock.today(), -1)) },
+    { name: 'review-reminders', at: '07:00', run: () => reviews.run(clock.today()) },
   ];
   const last = new Map<string, string | number>();
   let stopping = false;

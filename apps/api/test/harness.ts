@@ -58,6 +58,8 @@ export async function startHarness(extraEnv: Record<string, string> = {}): Promi
     APP_ENV: 'test', DATABASE_URL: url(ADMIN_URL, dbName, APP_ROLE, APP_ROLE_PW), DEV_IDP_ENABLED: 'true',
     PII_ENCRYPTION_KEY: hex(), PII_BLIND_INDEX_KEY: hex(), STORAGE_ENCRYPTION_KEY: hex(),
     BANK_WEBHOOK_SECRET: 'test-bank-webhook-secret-123', ESIGN_WEBHOOK_SECRET: 'test-esign-webhook-secret-123',
+    // scenario files simulate ~420 business days from one onboarding, so KYC must outlive them (CRD-07 tests set expiries explicitly)
+    KYC_REFRESH_MONTHS: '36',
     ADAPTER_MODE_LEDGER: 'mock', ...extraEnv,
   };
   const cfg = loadConfig(env);

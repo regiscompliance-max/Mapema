@@ -15,6 +15,7 @@ import { Outbox } from '../common/outbox';
 import { Public } from '../auth/auth';
 import { DevIdp } from '../auth/dev-idp';
 import { AdvancesService } from './advances';
+import { CreditReviewService } from './credit-reviews';
 import { OnboardingService } from './onboarding';
 import { OpsService } from './ops';
 import { PaymentsService } from './payments';
@@ -25,6 +26,7 @@ export class DevController {
   constructor(
     private readonly idp: DevIdp, private readonly db: Db, private readonly clock: Clock, private readonly outbox: Outbox,
     private readonly onboarding: OnboardingService, private readonly payments: PaymentsService, private readonly ops: OpsService, private readonly advances: AdvancesService,
+    private readonly reviews: CreditReviewService,
     @Inject(ADAPTERS) private readonly adapters: Adapters,
   ) {}
 
@@ -81,7 +83,8 @@ export class DevController {
     const held = await this.payments.postHeld();
     const ladder = await this.ops.runLateLadder();
     const payouts = await this.advances.refreshPayoutStatuses();
-    return { outbox, held, ladder, payouts };
+    const reviews = await this.reviews.run();
+    return { outbox, held, ladder, payouts, reviews };
   }
 
   @Get('dev/outbox/:id')
