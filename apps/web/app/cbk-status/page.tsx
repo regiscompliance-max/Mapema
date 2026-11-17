@@ -1,7 +1,15 @@
 import { cbkStatus } from '@/components/site';
+import { Body, PageHero } from '@/components/page';
 import { serverT } from '@/lib/lang-server';
 export default async function Page() {
   const { t } = await serverT(); const s = await cbkStatus();
-  return <div className="space-y-4"><h1 className="h1">{t('cbk.title')}</h1><p className="card text-lg">{s.statement}</p>
-    <p className="text-sm text-slate-600">Central Bank of Kenya, Haile Selassie Avenue, Nairobi. You can check licensed non-deposit-taking credit providers on the CBK website.</p></div>;
+  return (
+    <>
+      <PageHero eyebrow={t('footer.legal')} title={t('cbk.title')} />
+      <Body narrow>
+        <p className="card border-l-4 border-l-brass text-lg leading-relaxed">{s.statement}</p>
+        <p className="mt-6 text-sm leading-relaxed text-muted">Central Bank of Kenya, Haile Selassie Avenue, Nairobi. You can check licensed non-deposit-taking credit providers on the CBK website.</p>
+      </Body>
+    </>
+  );
 }

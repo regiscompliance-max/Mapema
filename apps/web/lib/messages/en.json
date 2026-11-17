@@ -118,5 +118,21 @@
   "dp.details": "Details (optional)",
   "form.error.invalid": "Please check the highlighted details and try again.",
   "form.error.network": "We could not send your request. Please try again in a moment.",
-  "form.sending": "Sending…"
+  "form.sending": "Sending…",
+  "home.eyebrow": "Supplier early payment · Kenya",
+  "home.process": "The process",
+  "home.more": "Learn more",
+  "trust.kes": "KES only",
+  "trust.kes.d": "Every figure in Kenya shillings, calculated to the cent.",
+  "trust.bank": "Bank-held collections",
+  "trust.bank.d": "Buyers pay into a dedicated bank account, never to an individual.",
+  "trust.maker": "Maker-checker controls",
+  "trust.maker.d": "No money moves without a second person approving it.",
+  "trust.data": "Data protected",
+  "trust.data.d": "Consent, access and deletion rights under the Data Protection Act, 2019.",
+  "calc.statement": "Indicative",
+  "fees.per30": "per 30 days",
+  "fees.perInvoice": "per invoice",
+  "footer.company": "Mapema",
+  "footer.legal": "Legal & regulatory"
 }

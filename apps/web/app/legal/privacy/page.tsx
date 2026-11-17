@@ -1,8 +1,9 @@
+import { Body } from '@/components/page';
 export default function Page() {
   return (
-    <article className="prose max-w-none space-y-4">
-      <p className="rounded bg-amber-50 p-3 text-sm">DRAFT privacy notice (version PN-2026-11-v1). Must be reviewed by Kenyan counsel and checked against Mapema&apos;s ODPC registration before launch.</p>
-      <h1 className="h1">Privacy notice</h1>
+    <Body narrow><article className="prose-legal space-y-4">
+      <p className="rounded-lg border border-brass/40 bg-ivory p-4 text-sm text-body">DRAFT privacy notice (version PN-2026-11-v1). Must be reviewed by Kenyan counsel and checked against Mapema&apos;s ODPC registration before launch.</p>
+      <h1 className="h1 text-navy">Privacy notice</h1>
       <p>Mapema Limited (&quot;Mapema&quot;) is the data controller for personal data processed on this website and in the Mapema portals, under the Data Protection Act, 2019.</p>
       <h2 className="h2">What we collect</h2>
       <p>Company details; names, ID numbers, dates of birth, phone numbers and emails of directors, owners and authorised users; bank account details; invoice data; credit bureau reports (with consent); records of what you accepted and when.</p>
@@ -14,6 +15,6 @@ export default function Page() {
       <p>Loan and transaction records for the period the law requires after the relationship ends (draft assumes 7 years; counsel to confirm); marketing data until you withdraw consent.</p>
       <h2 className="h2">Your rights</h2>
       <p>You can ask to access, correct, delete or move your data, or object to or restrict its use, at <a className="underline" href="/data-protection">Your data rights</a>. You can complain to the Office of the Data Protection Commissioner.</p>
-    </article>
+    </article></Body>
   );
 }

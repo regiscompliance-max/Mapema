@@ -1,19 +1,64 @@
 @import "tailwindcss";
 
+/* Self-hosted variable fonts (SIL OFL, licences in /fonts). No external requests: CSP stays 'self'. */
+@font-face { font-family: "Fraunces"; src: url("/fonts/fraunces-var.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Inter"; src: url("/fonts/inter-var.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+
 @theme {
-  --color-brand: #0f766e;
-  --color-brand-dark: #115e59;
-  --color-accent: #f59e0b;
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --color-ink: #0a1324;        /* near-black navy */
+  --color-navy: #0f1d36;
+  --color-navy-2: #16274a;
+  --color-line-dark: #26365a;  /* hairlines on navy */
+  --color-mist: #aab6cb;       /* body text on navy, 8.6:1 */
+  --color-brass: #c9a45c;      /* accent on navy, 7.9:1 */
+  --color-brass-soft: #e3cf9f;
+  --color-brass-ink: #7a5c22;  /* accent text on ivory, 5.6:1 */
+  --color-ivory: #f7f4ee;
+  --color-paper: #fbfaf7;
+  --color-line: #e4dfd3;       /* hairlines on light */
+  --color-body: #1c2433;
+  --color-muted: #4d5668;      /* 7:1 on ivory */
+  --color-emerald: #1f6f54;
+  --color-brand: #0f1d36;
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-serif: "Fraunces", "Iowan Old Style", Georgia, serif;
 }
 
 html { -webkit-text-size-adjust: 100%; }
-body { @apply bg-white text-slate-900 antialiased; }
-:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 2px; }
-.btn { @apply inline-flex items-center justify-center rounded-lg bg-brand px-4 py-3 text-base font-semibold text-white hover:bg-brand-dark disabled:opacity-50 min-h-12; }
-.btn-secondary { @apply inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-3 text-base font-semibold text-slate-800 hover:bg-slate-50 min-h-12; }
-.input { @apply block w-full rounded-lg border border-slate-300 px-3 py-3 text-base min-h-12; }
-.label { @apply mb-1 block text-sm font-medium text-slate-700; }
-.card { @apply rounded-xl border border-slate-200 bg-white p-4 shadow-sm; }
-.h1 { @apply text-3xl font-bold tracking-tight sm:text-4xl; }
-.h2 { @apply text-xl font-semibold; }
+body { @apply bg-paper text-body antialiased; font-family: var(--font-sans); font-feature-settings: "cv11", "ss01"; }
+:focus-visible { outline: 2px solid var(--color-brass); outline-offset: 3px; border-radius: 4px; }
+::selection { background: var(--color-brass-soft); color: var(--color-ink); }
+
+.font-serif, .h1, .h2, .display { font-family: var(--font-serif); font-optical-sizing: auto; }
+.num, .tabular-nums { font-variant-numeric: tabular-nums lining-nums; font-feature-settings: "tnum", "lnum"; }
+
+.container-x { @apply mx-auto w-full max-w-6xl px-5 sm:px-8; }
+.eyebrow { @apply text-xs font-semibold uppercase tracking-[0.22em] text-brass-ink; }
+.on-dark .eyebrow, .eyebrow-dark { @apply text-brass; }
+.display { @apply text-[2.35rem] leading-[1.05] font-medium tracking-[-0.02em] sm:text-6xl; }
+.h1 { @apply text-[2rem] leading-[1.1] font-medium tracking-[-0.015em] sm:text-5xl; }
+.h2 { @apply text-2xl leading-tight font-medium tracking-[-0.01em] sm:text-3xl; }
+.lead { @apply text-lg leading-relaxed text-muted sm:text-xl; }
+.on-dark .lead { @apply text-mist; }
+.rule-brass { height: 1px; background: linear-gradient(90deg, transparent, var(--color-brass) 20%, var(--color-brass) 80%, transparent); opacity: .55; }
+
+.btn { @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-navy px-6 py-3 text-[0.95rem] font-semibold tracking-wide text-white transition hover:bg-navy-2 disabled:opacity-50; }
+.on-dark .btn { @apply bg-brass text-ink hover:bg-brass-soft; }
+.btn-secondary { @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-navy/25 bg-transparent px-6 py-3 text-[0.95rem] font-semibold tracking-wide text-navy transition hover:border-navy; }
+.on-dark .btn-secondary { @apply border-white/30 text-white hover:border-brass hover:text-brass-soft; }
+.input { @apply block min-h-12 w-full rounded-md border border-line bg-white px-3.5 py-3 text-base text-body transition placeholder:text-slate-400 hover:border-[#cfc7b5] focus:border-navy focus:outline-none; }
+.label { @apply mb-1.5 block text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-muted; }
+.card { @apply rounded-xl border border-line bg-white p-5 sm:p-6; }
+
+.hero-bg {
+  background:
+    radial-gradient(1200px 500px at 85% -10%, rgba(201,164,92,.16), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(31,111,84,.18), transparent 60%),
+    linear-gradient(180deg, var(--color-ink), var(--color-navy));
+}
+.grain { background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px); background-size: 48px 48px; }
+.statement { @apply rounded-2xl border border-line-dark bg-[#0c1830]/90 text-white shadow-[0_30px_80px_-30px_rgba(0,0,0,.6)] backdrop-blur; }
+.statement .input { font-variant-numeric: tabular-nums; @apply border-line-dark bg-ink/60 text-white hover:border-brass/60 focus:border-brass; }
+.statement .label { @apply text-mist; }
+.prose-legal h2 { @apply mt-8 font-serif text-xl font-medium; }
+.prose-legal p, .prose-legal li { @apply leading-relaxed text-body; }

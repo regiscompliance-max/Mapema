@@ -22,19 +22,32 @@ export function FeeCalculator() {
     [t('calc.totalCost'), result.q.totalCostCents], [t('calc.balance'), result.q.supplierBalanceCents],
   ] : [];
   return (
-    <section className="card space-y-4" aria-labelledby="calc-h">
-      <h2 id="calc-h" className="h2">{t('calc.title')}</h2>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <label><span className="label">{t('calc.amount')}</span><input className="input" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
-        <label><span className="label">{t('calc.days')}</span><input className="input" inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} /></label>
+    <section className="statement overflow-hidden" aria-labelledby="calc-h" data-testid="fee-calculator">
+      <div className="flex items-center justify-between border-b border-line-dark px-5 py-3.5 sm:px-6">
+        <h2 id="calc-h" className="font-serif text-lg font-medium text-white">{t('calc.title')}</h2>
+        <span className="rounded-full border border-brass/40 px-2.5 py-0.5 text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-brass">{t('calc.statement')}</span>
       </div>
-      {result.error ? <p role="alert" className="text-red-700">{result.error}</p> : (
-        <dl className="divide-y divide-slate-100" aria-live="polite">
-          {rows.map(([k, v]) => <div key={k} className="flex justify-between py-2"><dt>{k}</dt><dd className="font-semibold tabular-nums">{kesFromCents(v as bigint)}</dd></div>)}
-          <div className="flex justify-between py-2 text-sm text-slate-600"><dt>{t('calc.apr')}</dt><dd>{bps(result.q!.aprBps)}</dd></div>
-        </dl>
-      )}
-      <p className="text-sm text-slate-600">{t('calc.note')}</p>
+      <div className="grid items-end gap-4 px-5 pt-5 sm:grid-cols-[1.4fr_1fr] sm:px-6">
+        <label><span className="label">{t('calc.amount')}</span><input className="input text-lg" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+        <label><span className="label">{t('calc.days')}</span><input className="input text-lg" inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value)} /></label>
+      </div>
+      <div className="px-5 pb-5 pt-4 sm:px-6">
+        {result.error ? <p role="alert" className="rounded-md border border-red-400/40 bg-red-500/10 p-3 text-red-200">{result.error}</p> : (
+          <dl className="num text-[0.95rem]" aria-live="polite">
+            {rows.map(([k, v], i) => {
+              const total = i === 3; const bal = i === 4;
+              return (
+                <div key={k} className={`flex items-baseline justify-between gap-4 py-2.5 ${total ? 'mt-1 border-t border-brass/40 pt-3' : 'border-b border-dashed border-line-dark'} ${bal ? 'mt-2 rounded-lg border border-brass/30 bg-brass/[0.08] px-3 py-3' : ''}`}>
+                  <dt className={bal ? 'font-semibold text-brass-soft' : total ? 'font-semibold text-white' : 'text-mist'}>{k}</dt>
+                  <dd className={`text-right font-semibold tabular-nums tracking-tight ${bal ? 'text-lg text-brass-soft' : 'text-white'}`}>{kesFromCents(v as bigint)}</dd>
+                </div>
+              );
+            })}
+            <div className="flex justify-between pt-3 text-xs uppercase tracking-[0.14em] text-mist"><dt>{t('calc.apr')}</dt><dd className="tabular-nums">{bps(result.q!.aprBps)}</dd></div>
+          </dl>
+        )}
+        <p className="mt-4 border-t border-line-dark pt-3 text-xs leading-relaxed text-mist">{t('calc.note')}</p>
+      </div>
     </section>
   );
 }

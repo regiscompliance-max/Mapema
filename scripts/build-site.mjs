@@ -20,6 +20,7 @@ if (!process.argv.includes('--no-build')) {
 }
 
 const TYPES = { html: 'text/html; charset=utf-8', js: 'application/javascript; charset=utf-8', css: 'text/css; charset=utf-8', txt: 'text/plain; charset=utf-8', json: 'application/json; charset=utf-8', svg: 'image/svg+xml' };
+const BINARY = { woff2: 'font/woff2', ico: 'image/x-icon', png: 'image/png' }; // embedded as base64
 const files = {};
 (function walk(d) {
   for (const n of readdirSync(d)) {
@@ -28,7 +29,8 @@ const files = {};
     const rel = '/' + relative(out, p).split('\\').join('/');
     if (rel === '/_headers') continue; // headers are set in the Worker
     const ext = rel.split('.').pop();
-    if (!TYPES[ext]) throw new Error(`No text type for ${rel}; the embedded Worker only serves text files`);
+    if (BINARY[ext]) { files[rel] = [BINARY[ext], readFileSync(p).toString('base64'), 1]; continue; }
+    if (!TYPES[ext]) throw new Error(`No content type for ${rel}; add it to TYPES or BINARY in scripts/build-site.mjs`);
     files[rel] = [TYPES[ext], readFileSync(p, 'utf8')];
   }
 })(out);

@@ -1,3 +1,7 @@
 import { DsrForm } from '@/components/forms';
+import { Body, PageHero } from '@/components/page';
 import { serverT } from '@/lib/lang-server';
-export default async function Page() { const { t } = await serverT(); return <div className="space-y-6"><h1 className="h1">{t('dp.title')}</h1><p className="text-lg">{t('dp.lead')}</p><DsrForm /></div>; }
+export default async function Page() {
+  const { t } = await serverT();
+  return <><PageHero eyebrow={t('footer.legal')} title={t('dp.title')} lead={t('dp.lead')} /><Body narrow><DsrForm /></Body></>;
+}

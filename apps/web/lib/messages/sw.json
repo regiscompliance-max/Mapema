@@ -118,5 +118,21 @@
   "dp.details": "Maelezo (si lazima)",
   "form.error.invalid": "Tafadhali kagua taarifa ulizoweka kisha ujaribu tena.",
   "form.error.network": "Hatukuweza kutuma ombi lako. Tafadhali jaribu tena baada ya muda mfupi.",
-  "form.sending": "Inatuma…"
+  "form.sending": "Inatuma…",
+  "home.eyebrow": "Malipo ya mapema kwa wasambazaji · Kenya",
+  "home.process": "Utaratibu",
+  "home.more": "Jifunze zaidi",
+  "trust.kes": "KES pekee",
+  "trust.kes.d": "Kila kiasi kwa shilingi za Kenya, kimehesabiwa hadi senti.",
+  "trust.bank": "Makusanyo kupitia benki",
+  "trust.bank.d": "Wanunuzi hulipa kwenye akaunti maalum ya benki, kamwe si kwa mtu binafsi.",
+  "trust.maker": "Udhibiti wa watu wawili",
+  "trust.maker.d": "Hakuna pesa inayotumwa bila mtu wa pili kuidhinisha.",
+  "trust.data": "Data inalindwa",
+  "trust.data.d": "Haki za ridhaa, kuona na kufuta data chini ya Sheria ya Ulinzi wa Data, 2019.",
+  "calc.statement": "Makadirio",
+  "fees.per30": "kwa siku 30",
+  "fees.perInvoice": "kwa kila ankara",
+  "footer.company": "Mapema",
+  "footer.legal": "Sheria na udhibiti"
 }

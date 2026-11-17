@@ -14,7 +14,8 @@ const PHONE = /^\+254[17][0-9]{8}$/;
 const DSR_TYPES = ['access', 'correction', 'deletion', 'objection', 'portability', 'restriction'];
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEC } });
-const file = (f, status, extra) => new Response(f[1], { status, headers: { 'Content-Type': f[0], ...SEC, ...extra } });
+const bytes = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+const file = (f, status, extra) => new Response(f[2] ? bytes(f[1]) : f[1], { status, headers: { 'Content-Type': f[0], ...SEC, ...extra } });
 const str = (v, max, required = true) => {
   if (v === undefined || v === null || v === '') return required ? null : '';
   if (typeof v !== 'string') return null;
@@ -82,7 +83,7 @@ export default {
     if (p.length > 1 && p.endsWith('/')) return Response.redirect(url.origin + p.slice(0, -1) + url.search, 308);
     if (p.endsWith('.html') && p !== '/404.html') return Response.redirect(url.origin + (p === '/index.html' ? '/' : p.slice(0, -5)) + url.search, 308);
     const f = FILES[p] || FILES[p === '/' ? '/index.html' : p + '.html'];
-    if (f) return file(f, 200, { 'Cache-Control': p.startsWith('/_next/static/') ? 'public, max-age=31536000, immutable' : 'public, max-age=0, must-revalidate' });
+    if (f) return file(f, 200, { 'Cache-Control': p.startsWith('/_next/static/') ? 'public, max-age=31536000, immutable' : p.startsWith('/fonts/') ? 'public, max-age=604800' : 'public, max-age=0, must-revalidate' });
     return file(FILES['/404.html'], 404, { 'Cache-Control': 'no-store' });
   },
 };

@@ -42,3 +42,10 @@ Deploy with the Cloudflare connector: call its `execute` tool with code `$file:<
 With a Cloudflare API token, `wrangler deploy dist/worker.mjs --name mapema` plus a `d1_databases` binding `DB` works too.
 
 Language: English HTML; the Kiswahili switch is client-side (`?lang=sw|en`, remembered in localStorage). Swahili strings are drafts.
+
+## Design assets
+
+Self-hosted variable fonts in `apps/web/public/fonts` (Fraunces for headings, Inter for text and tabular figures; SIL OFL
+licences alongside), plus `favicon.svg`, `favicon.ico` and `apple-touch-icon.png`. Binary files (woff2/ico/png) are
+embedded in the Worker as base64 by `scripts/build-site.mjs`. No external requests, so the CSP stays `'self'`.
+Mark/wordmark: `apps/web/components/brand.tsx`. Colour tokens: `apps/web/app/globals.css`.
