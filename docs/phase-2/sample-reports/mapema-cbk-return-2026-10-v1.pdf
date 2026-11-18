@@ -1,0 +1,64 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Length 3466 >>
+stream
+BT /F1 13 Tf 50 800 Td (DRAFT CBK monthly return 2026-10 - ASSUMED LAYOUT, NOT FOR SUBMISSION) Tj ET
+BT /F1 8 Tf 450 20 Td (Page 1 of 1) Tj ET
+BT /F1 9 Tf 50 775 Td (Template ASSUMED-0.1 \(assumed_draft\) - ASSUMPTION - official CBK NDTCP monthly return format not yet supplied \(Q-A\)) Tj ET
+BT /F1 9 Tf 50 759 Td (Snapshot v1 sha256 d19942431786fa0f3f84ed461caf213733d408a9818564ad19bdec43be801e50) Tj ET
+BT /F1 9 Tf 50 743 Td () Tj ET
+BT /F1 9 Tf 50 727 Td (A Institution | A01 | Lender name \(assumed\) | Mapema) Tj ET
+BT /F1 9 Tf 50 711 Td (A Institution | A02 | CBK licence number \(assumed\) | CBK licence DEMO-LICENCE-001) Tj ET
+BT /F1 9 Tf 50 695 Td (A Institution | A03 | Reporting period \(assumed\) | 2026-10) Tj ET
+BT /F1 9 Tf 50 679 Td (A Institution | A04 | Reporting date \(month end\) \(assumed\) | 2026-10-31) Tj ET
+BT /F1 9 Tf 50 663 Td (B Portfolio | B01 | Number of loans outstanding \(assumed\) | 3) Tj ET
+BT /F1 9 Tf 50 647 Td (B Portfolio | B02 | Gross loans outstanding \(principal\) \(assumed\) | 2080000.00) Tj ET
+BT /F1 9 Tf 50 631 Td (B Portfolio | B03 | Number of borrowers with loans outstanding \(assumed\) | 1) Tj ET
+BT /F1 9 Tf 50 615 Td (B Portfolio | B04 | Number of loans disbursed in the month \(assumed\) | 0) Tj ET
+BT /F1 9 Tf 50 599 Td (B Portfolio | B05 | Value of loans disbursed in the month \(assumed\) | 0.00) Tj ET
+BT /F1 9 Tf 50 583 Td (B Portfolio | B06 | Principal repaid in the month \(assumed\) | 240000.00) Tj ET
+BT /F1 9 Tf 50 567 Td (C Income | C01 | Interest income received in the month \(cash basis\) \(assumed\) | 21000.00) Tj ET
+BT /F1 9 Tf 50 551 Td (C Income | C02 | Fee income received in the month \(cash basis\) \(assumed\) | 2500.00) Tj ET
+BT /F1 9 Tf 50 535 Td (D Asset quality | D01 | Principal current \(0 DPD\) \(assumed\) | 1600000.00) Tj ET
+BT /F1 9 Tf 50 519 Td (D Asset quality | D02 | Principal 1-30 DPD \(assumed\) | 0.00) Tj ET
+BT /F1 9 Tf 50 503 Td (D Asset quality | D03 | Principal 31-60 DPD \(assumed\) | 400000.00) Tj ET
+BT /F1 9 Tf 50 487 Td (D Asset quality | D04 | Principal 61-90 DPD \(assumed\) | 80000.00) Tj ET
+BT /F1 9 Tf 50 471 Td (D Asset quality | D05 | Principal over 90 DPD \(assumed\) | 0.00) Tj ET
+BT /F1 9 Tf 50 455 Td (D Asset quality | D06 | Non-performing loans \(principal\) \(assumed\) | 80000.00) Tj ET
+BT /F1 9 Tf 50 439 Td (D Asset quality | D07 | NPL ratio \(assumed\) | 3.85) Tj ET
+BT /F1 9 Tf 50 423 Td (D Asset quality | D08 | Loans written off in the month \(principal\) \(assumed\) | 0.00) Tj ET
+BT /F1 9 Tf 50 407 Td (D Asset quality | D09 | Interest waived under the in duplum rule in the month \(assumed\) | 0.00) Tj ET
+BT /F1 9 Tf 50 391 Td (E Concentration | E01 | Largest single buyer exposure as % of lending float \(assumed\) | 4.16) Tj ET
+BT /F1 9 Tf 50 375 Td (E Concentration | E02 | Largest single supplier exposure as % of lending float \(assumed\) | 4.16) Tj ET
+BT /F1 9 Tf 50 359 Td (E Concentration | E03 | Largest sector exposure as % of lending float \(assumed\) | 4.16) Tj ET
+BT /F1 9 Tf 50 343 Td (F Consumer protection | F01 | Complaints received in the month \(assumed\) | 0) Tj ET
+BT /F1 9 Tf 50 327 Td (F Consumer protection | F02 | Complaints resolved in the month \(assumed\) | 0) Tj ET
+BT /F1 9 Tf 50 311 Td (F Consumer protection | F03 | Complaints open at month end \(assumed\) | 0) Tj ET
+BT /F1 9 Tf 50 295 Td (G Pricing | G01 | Active pricing version and CBK approval reference \(assumed\) | DEMO-STD / CBK/DEMO/0001) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 3 0 R >> >> >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000185 00000 n 
+0000003703 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+3829
+%%EOF

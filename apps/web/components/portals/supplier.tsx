@@ -1,4 +1,5 @@
 'use client';
+import { SupplierDashboard } from './phase2';
 import { FormEvent, useState } from 'react';
 import { api, newIdempotencyKey } from '@/lib/api';
 import { kesFromCents, bps, parseKesInput } from '@/lib/money';
@@ -8,11 +9,12 @@ import { Msg, StatusPill, Table, Tabs, useAction, useGet } from '../ui';
 
 export function SupplierPortal({ orgId, roles = [] }: { orgId: string; roles?: string[] }) {
   const t = useT();
-  const [tab, setTab] = useState('invoices');
+  const [tab, setTab] = useState('overview');
   return (
     <div>
-      <Tabs active={tab} onChange={setTab} tabs={[{ id: 'invoices', label: t('supplier.title') }, { id: 'submit', label: 'Add invoice' }, { id: 'advances', label: t('supplier.advances') }, { id: 'account', label: 'Account' },
+      <Tabs active={tab} onChange={setTab} tabs={[{ id: 'overview', label: 'Overview' }, { id: 'invoices', label: t('supplier.title') }, { id: 'submit', label: 'Add invoice' }, { id: 'advances', label: t('supplier.advances') }, { id: 'account', label: 'Account' },
         { id: 'privacy', label: 'Privacy' }, { id: 'help', label: t('footer.complaints') }]} />
+      {tab === 'overview' && <SupplierDashboard orgId={orgId} />}
       {tab === 'invoices' && <Invoices />}
       {tab === 'submit' && <SubmitInvoice orgId={orgId} />}
       {tab === 'advances' && <><Advances /><div className="mt-6"><Shortfalls canClose={roles.includes('supplier_admin')} /></div></>}

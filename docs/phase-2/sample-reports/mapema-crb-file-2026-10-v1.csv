@@ -1,0 +1,7 @@
+# DRAFT - ASSUMED LAYOUT - NOT AN OFFICIAL CRB SUBMISSION FORMAT - DO NOT SUBMIT
+# template=crb_file ASSUMED-0.1 status=assumed_draft source="ASSUMPTION - CRB data submission specification not yet obtained (Q-A, Q-C)"; snapshot=2026-10 v1 sha256=d19942431786fa0f3f84ed461caf213733d408a9818564ad19bdec43be801e50
+record_type,reporting_date,lender_account_ref,borrower_name,borrower_kra_pin,borrower_registration_no,facility_type,currency,disbursement_date,maturity_date,original_amount,outstanding_principal,days_in_arrears,account_status
+FACILITY,2026-10-31,603b7245-a76e-451b-ab0a-63ae1e86b736,Jua Kali Packaging Ltd,P051111111B,PVT-JUA001,INVOICE_ADVANCE,KES,2026-08-01,2026-09-15,400000.00,400000.00,46,recourse
+FACILITY,2026-10-31,c3e7836e-0628-46df-9443-7ba3244ec6be,Jua Kali Packaging Ltd,P051111111B,PVT-JUA001,INVOICE_ADVANCE,KES,2026-08-01,2026-08-22,80000.00,80000.00,70,non_performing
+FACILITY,2026-10-31,69b33fee-1256-4398-8abc-f1e9cb730aa8,Jua Kali Packaging Ltd,P051111111B,PVT-JUA001,INVOICE_ADVANCE,KES,2026-08-01,2026-11-19,1600000.00,1600000.00,0,current
+FACILITY,2026-10-31,c94e9d02-dd61-4a43-b309-ea09736be4ed,Jua Kali Packaging Ltd,P051111111B,PVT-JUA001,INVOICE_ADVANCE,KES,2026-08-01,2026-10-15,240000.00,0.00,0,settled

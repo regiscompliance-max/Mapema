@@ -7,15 +7,17 @@ import { Msg, StatusPill, Table, Tabs, useAction, useGet } from '../ui';
 import { Complaints } from './supplier';
 import { kesFromCents } from '@/lib/money';
 import { Documents, Shortfalls } from '../shared';
+import { BuyerDashboard } from './phase2';
 
 export function BuyerPortal({ roles, orgId }: { roles: string[]; orgId: string }) {
   const t = useT();
-  const [tab, setTab] = useState('invoices');
+  const [tab, setTab] = useState('overview');
   const checker = roles.some((r) => r === 'buyer_checker' || r === 'buyer_admin');
   return (
     <div>
-      <Tabs active={tab} onChange={setTab} tabs={[{ id: 'invoices', label: t('buyer.title') }, { id: 'new', label: t('buyer.new') }, ...(checker ? [{ id: 'confirm', label: 'Confirm & sign ILU' }] : []),
+      <Tabs active={tab} onChange={setTab} tabs={[{ id: 'overview', label: 'Overview' }, { id: 'invoices', label: t('buyer.title') }, { id: 'new', label: t('buyer.new') }, ...(checker ? [{ id: 'confirm', label: 'Confirm & sign ILU' }] : []),
         { id: 'calendar', label: t('buyer.calendar') }, { id: 'programme', label: 'Programme' }, { id: 'documents', label: 'Documents' }, { id: 'suppliers', label: t('buyer.invite') }, ...(roles.includes('buyer_admin') ? [{ id: 'users', label: 'Users' }] : []), { id: 'help', label: t('footer.complaints') }]} />
+      {tab === 'overview' && <BuyerDashboard orgId={orgId} />}
       {tab === 'invoices' && <AllInvoices />}
       {tab === 'new' && <NewInvoice />}
       {tab === 'confirm' && <Confirm />}

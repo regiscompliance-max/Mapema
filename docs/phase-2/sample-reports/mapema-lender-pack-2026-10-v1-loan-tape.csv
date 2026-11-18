@@ -1,0 +1,6 @@
+# Mapema lender pack loan tape 2026-10 (snapshot v1 sha256=d19942431786fa0f3f84ed461caf213733d408a9818564ad19bdec43be801e50); amounts KES
+invoice_number,buyer,supplier,sector,disbursement_date,due_date,term_days,invoice_amount_kes,principal_kes,discount_fee_kes,verification_fee_kes,principal_repaid_kes,fees_repaid_kes,interest_repaid_kes,supplier_balance_kes,outstanding_principal_kes,dpd,bucket,status_at_month_end
+DEMO-INV-0002,Acme Supermarkets Ltd,Jua Kali Packaging Ltd,FMCG,2026-08-01,2026-09-15,45,500000.00,400000.00,21000.00,2500.00,0.00,0.00,0.00,0.00,400000.00,46,dpd_31_60,recourse
+DEMO-INV-0003,Acme Supermarkets Ltd,Jua Kali Packaging Ltd,FMCG,2026-08-01,2026-08-22,21,100000.00,80000.00,1960.00,2500.00,0.00,0.00,0.00,0.00,80000.00,70,dpd_61_90,non_performing
+DEMO-INV-0004,Acme Supermarkets Ltd,Jua Kali Packaging Ltd,FMCG,2026-08-01,2026-11-19,110,2000000.00,1600000.00,205333.33,2500.00,0.00,0.00,0.00,0.00,1600000.00,0,current,current
+DEMO-INV-0005,Acme Supermarkets Ltd,Jua Kali Packaging Ltd,FMCG,2026-08-01,2026-10-15,75,300000.00,240000.00,21000.00,2500.00,240000.00,2500.00,21000.00,36500.00,0.00,0,current,settled

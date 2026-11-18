@@ -25,6 +25,11 @@ const TAGS = {
   'credit-reviews': ['Credit reviews', 'CRD-07 review-date and KYC-expiry reminders as credit tasks (30/7/0 days).'],
   'self-service': ['Documents and self-service', 'Org-scoped document list/download (notices, receipts, uploads), buyer programme utilisation, consents, my-data view, staff user list.'],
   'session.controller': ['Session', 'Browser sign-in: exchange an IdP token for an httpOnly session cookie; CSRF token; logout.'],
+  collections: ['Collections', 'Phase 2: daily collections run (reminders pre-due/due/overdue by SMS + email, late -> recourse -> NPL ladder, in duplum cap), collections book, configurable policy (maker-checker), recourse to the supplier (maker-checker).'],
+  reconciliation: ['Reconciliation', 'Phase 2: daily bank = Fineract cash = platform reconciliation against an approved baseline; breaks classified timing / explained / unexplained; maker-checker resolution.'],
+  regulatory: ['Regulatory and lender reports', 'Phase 2: month-end snapshots (append-only, hashed), CBK monthly return and CRB file generators (DRAFT, assumed layout until the official formats are loaded), reproducible lender pack (CSV + PDF), template mapping layer (maker-checker).'],
+  dashboards: ['Dashboards', 'Phase 2: staff portfolio/utilisation/ageing/NPL dashboard; buyer and supplier dashboards scoped to their organisation.'],
+  integrations: ['Integrations', 'Phase 2: accounting (Xero/QuickBooks adapter) daily journal push, idempotent; CRM (HubSpot adapter) buyer-lead import from the site book-a-call form, consent respected.'],
   dev: ['Development only', 'Mounted only when DEV_IDP_ENABLED=true and APP_ENV is development or test. Never in staging or production.'],
 };
 const SUMMARIES = {
@@ -136,7 +141,7 @@ for (const o of ops.sort((a, b) => a.path.localeCompare(b.path))) {
 const used = [...new Set(ops.map((o) => o.mod))].filter((m) => TAGS[m]);
 const doc = {
   openapi: '3.1.0',
-  info: { title: 'Mapema Platform API (as implemented, Phase 1b)', version: '1.1.0-phase1b',
+  info: { title: 'Mapema Platform API (as implemented, Phase 2)', version: '1.2.0-phase2',
     description: 'Generated from the NestJS controllers by scripts/gen-openapi.mjs. Money: KES integer cents (strings in JSON). Errors: RFC 9457 problem+json; `title` is a stable error code. All users need MFA; money movements need step-up and maker-checker. Phase 0 design contract: openapi/phase-0-design.yaml (differences are listed in docs/phase-1/README).',
     contact: { name: 'Mapema engineering' }, license: { name: 'Proprietary - Mapema Limited, all rights reserved', identifier: 'LicenseRef-Mapema-Proprietary' } },
   servers: [{ url: 'https://api.staging.mapema.example', description: 'Staging placeholder (not deployed in Phase 1); locally http://localhost:4000' }],

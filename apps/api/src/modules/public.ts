@@ -9,7 +9,7 @@ import { z } from 'zod';
 import type { Adapters } from '@mapema/adapters';
 import { quote, STANDARD_PRICING } from '@mapema/pricing';
 import { Audit, SYSTEM } from '../common/audit';
-import { ADAPTERS } from '../common/config';
+import { ADAPTERS, AppConfig, CONFIG } from '../common/config';
 import { FieldCrypto } from '../common/crypto';
 import { Db, toCents } from '../common/db';
 import { zPhoneKe, zPositiveCents, zText } from '../common/http';
@@ -20,7 +20,7 @@ export const PRIVACY_NOTICE_VERSION = 'PN-2026-11-v1';
 
 @Injectable()
 export class PublicService {
-  constructor(private readonly db: Db, private readonly audit: Audit, private readonly crypto: FieldCrypto, private readonly settings: SettingsService, @Inject(ADAPTERS) private readonly adapters: Adapters) {}
+  constructor(private readonly db: Db, private readonly audit: Audit, private readonly crypto: FieldCrypto, private readonly settings: SettingsService, @Inject(ADAPTERS) private readonly adapters: Adapters, @Inject(CONFIG) private readonly cfg: AppConfig) {}
 
   async health() {
     let db = false;
@@ -53,9 +53,12 @@ export class PublicService {
 
   async cbkStatus() {
     const l = await this.settings.lending();
+    const notYet = 'Mapema is not yet licensed by the Central Bank of Kenya as a non-deposit-taking credit provider. We do not provide credit until we are licensed.';
+    // D-42: outside production a licence number is always test data, so the public wording never claims a licence there.
+    if (this.cfg.APP_ENV !== 'production') return { lendingEnabled: l.enabled, cbkLicenceNo: l.cbk_licence_no, demo: true, statement: l.cbk_licence_no ? `DEMO ENVIRONMENT - test data only (fictitious licence reference ${l.cbk_licence_no}). ${notYet}` : notYet };
     return { lendingEnabled: l.enabled, cbkLicenceNo: l.cbk_licence_no, statement: l.cbk_licence_no
       ? `Mapema is licensed by the Central Bank of Kenya as a non-deposit-taking credit provider, licence ${l.cbk_licence_no}.`
-      : 'Mapema is not yet licensed by the Central Bank of Kenya as a non-deposit-taking credit provider. We do not provide credit until we are licensed.' };
+      : notYet };
   }
 }
 

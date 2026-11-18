@@ -1,0 +1,26 @@
+# template=lender_pack MAPEMA-1 status=official source="Mapema lender pack v1 (own format; lenders may request changes)"; snapshot=2026-10 v1 sha256=d19942431786fa0f3f84ed461caf213733d408a9818564ad19bdec43be801e50
+section,code,label,value
+Portfolio,P01,Loans outstanding (number),3
+Portfolio,P02,Principal outstanding,2080000.00
+Portfolio,P03,Disbursed in month,0.00
+Portfolio,P04,Principal repaid in month,240000.00
+Portfolio,P05,Lending float,50000000.00
+Income,I01,Interest received in month,21000.00
+Income,I02,Fees received in month,2500.00
+Ageing,G01,Current,1600000.00
+Ageing,G02,1-30 DPD,0.00
+Ageing,G03,31-60 DPD,400000.00
+Ageing,G04,61-90 DPD,80000.00
+Ageing,G05,Over 90 DPD,0.00
+Credit quality,Q01,Late (principal),0.00
+Credit quality,Q02,Recourse (principal),400000.00
+Credit quality,Q03,Non-performing (principal),80000.00
+Credit quality,Q04,NPL ratio,3.85
+Credit quality,Q05,Written off in month,0.00
+Concentration,C01,Largest buyer % of float (limit 25%),4.16
+Concentration,C02,Largest supplier % of float (limit 10%),4.16
+Concentration,C03,Largest sector % of float (limit 35%),4.16
+Collections,L01,Cash collected in month,300000.00
+Collections,L02,Recourse cases open at month end,2
+Reconciliation,R01,Daily reconciliation runs in month,31
+Reconciliation,R02,Runs with unexplained breaks,0

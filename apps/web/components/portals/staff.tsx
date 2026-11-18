@@ -5,6 +5,7 @@ import { kesFromCents, parseKesInput } from '@/lib/money';
 import { useT } from '../lang';
 import { Msg, StatusPill, Table, Tabs, useAction, useGet } from '../ui';
 import { Field } from '../shared';
+import { CollectionsBook, ReconBreaks, Reports, StaffOverview } from './phase2';
 import { CreditFile, DsrPanel, LimitsFloat, ReviewTasks, Shortfalls, StaffAdmin, WriteOffs } from './staff-extra';
 
 export function StaffPortal({ roles }: { roles: string[] }) {
@@ -12,18 +13,21 @@ export function StaffPortal({ roles }: { roles: string[] }) {
   const [tab, setTab] = useState('dash');
   const has = (...r: string[]) => roles.some((x) => r.includes(x));
   const tabs = [{ id: 'dash', label: t('staff.dashboard') }, { id: 'approvals', label: t('staff.approvals') }, { id: 'advances', label: t('staff.advances') },
-    ...(has('ops', 'ceo') ? [{ id: 'payments', label: t('staff.payments') }, { id: 'recon', label: t('staff.recon') }] : []), { id: 'orgs', label: t('staff.orgs') },
+    ...(has('ops', 'ceo') ? [{ id: 'payments', label: t('staff.payments') }, { id: 'recon', label: t('staff.recon') }] : []), ...(has('ops', 'ceo', 'credit', 'compliance') ? [{ id: 'collections', label: 'Collections' }] : []),
+    ...(has('compliance', 'ceo', 'credit') ? [{ id: 'reports', label: 'Reports' }] : []), { id: 'orgs', label: t('staff.orgs') },
     ...(has('credit', 'ceo', 'admin') ? [{ id: 'reviews', label: 'Review tasks' }] : []), ...(has('admin', 'credit') ? [{ id: 'writeoffs', label: 'Write-offs' }] : []),
     ...(has('compliance') ? [{ id: 'compliance', label: t('staff.compliance') }] : []), ...(has('admin', 'ceo', 'compliance') ? [{ id: 'settings', label: t('staff.settings') }] : []),
     ...(has('admin', 'ceo', 'compliance') ? [{ id: 'people', label: 'Staff' }] : [])];
   return (
     <div>
       <Tabs active={tab} onChange={setTab} tabs={tabs} />
-      {tab === 'dash' && <Dashboard />}
+      {tab === 'dash' && <div className="space-y-6"><StaffOverview /><h2 className="h2">Work queues</h2><Dashboard /></div>}
       {tab === 'approvals' && <Approvals />}
       {tab === 'advances' && <Advances canCredit={has('credit')} canOps={has('ops')} />}
       {tab === 'payments' && <Payments />}
-      {tab === 'recon' && <Recon />}
+      {tab === 'recon' && <ReconBreaks canOps={has('ops')} />}
+      {tab === 'collections' && <CollectionsBook canCredit={has('credit')} canOps={has('ops')} />}
+      {tab === 'reports' && <Reports canGenerate={has('compliance', 'ceo')} />}
       {tab === 'orgs' && <Orgs canCredit={has('credit')} />}
       {tab === 'reviews' && <ReviewTasks canCredit={has('credit')} />}
       {tab === 'writeoffs' && <WriteOffs />}
@@ -87,12 +91,6 @@ function Payments() {
   );
 }
 
-function Recon() {
-  const { data, reload } = useGet<any[]>('/reconciliation/runs');
-  const { busy, msg, run } = useAction();
-  return (<div className="space-y-4"><button className="btn" disabled={busy} onClick={() => run(() => api('/reconciliation/run', { body: {} }), 'Reconciliation run').then(reload)}>Run reconciliation now</button><Msg msg={msg} />
-    <Table rows={data} cols={[{ key: 'as_of_date', label: 'Date', render: (r) => String(r.as_of_date).slice(0, 10) }, { key: 'bank_balance_cents', label: 'Bank', money: true }, { key: 'fineract_cash_cents', label: 'Ledger', money: true }, { key: 'platform_cash_cents', label: 'Platform', money: true }, { key: 'status', label: 'Status', render: (r) => <StatusPill s={r.status} /> }, { key: 'open_breaks', label: 'Open breaks' }]} /></div>);
-}
 
 function Orgs({ canCredit }: { canCredit: boolean }) {
   const { data, reload } = useGet<any[]>('/organisations');

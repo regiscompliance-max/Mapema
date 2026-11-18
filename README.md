@@ -2,7 +2,7 @@
 
 **[Technical Writer]** Buyer-led supplier early-payment platform for Kenya. One web app (public site plus buyer, supplier, staff and read-only portals), a NestJS API, a background worker, PostgreSQL, and **Apache Fineract as the loan and accounting ledger**. Every outside provider sits behind an adapter that has a mock.
 
-> Phase 1 status, coverage, test numbers and open items: [`docs/phase-1/README.md`](docs/phase-1/README.md). Phase 1b (remaining screens, cookie sessions, shortfalls, shared rate limit, review reminders): [`docs/phase-1b/README.md`](docs/phase-1b/README.md).
+> Phase 1 status, coverage, test numbers and open items: [`docs/phase-1/README.md`](docs/phase-1/README.md). Phase 1b (remaining screens, cookie sessions, shortfalls, shared rate limit, review reminders): [`docs/phase-1b/README.md`](docs/phase-1b/README.md). Phase 2 (reconciliation, CBK/CRB/lender reports, late-payment automation, dashboards, Xero and HubSpot adapters): [`docs/phase-2/README.md`](docs/phase-2/README.md).
 > Nothing here is deployed. There is no staging environment yet, and no pen test has been done.
 
 ## Repository layout
@@ -21,6 +21,7 @@
 | `infra/` | Dockerfiles, Keycloak realm, DB init (written, **not run**: no Docker on the build box) |
 | `docs/phase-1/` | Phase 1 report, compliance review, QA report, security checklist, CEO questions |
 | `docs/phase-1b/` | Phase 1b report, QA report, security checklist update |
+| `docs/phase-2/` | Phase 2 stories, report, QA report, security checklist, compliance review, sample month-end reports |
 
 ## Prerequisites
 
@@ -86,6 +87,7 @@ The full list with comments is in [`.env.example`](.env.example). It contains no
 - Runtime: `APP_ENV`, `PORT`, `WEB_ORIGIN`
 - Database: `DATABASE_URL` (app role), `DATABASE_ADMIN_URL`, `TEST_DATABASE_ADMIN_URL`, `APP_DB_LOGIN_PASSWORD`
 - Identity: `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URL`, `DEV_IDP_ENABLED`, `STEP_UP_MAX_AGE_SEC`
+- Phase 2: `ADAPTER_MODE_ACCOUNTING`, `ADAPTER_MODE_CRM`, `ADAPTER_MODE_SITE_LEADS` (all `mock` by default), Xero/HubSpot/D1 credentials (empty), `ACCOUNTING_GL_MAP`, `CRB_SUBMISSION_REQUIRE_CONSENT` (true), `SEED_DEMO_MONTH` (e.g. `2026-10`). See `.env.example`.
 - Browser sessions and limits (Phase 1b): `SESSION_IDLE_MINUTES` (15), `SESSION_MAX_HOURS` (8), `RATE_LIMIT_STORE` (`postgres`|`memory`), `KYC_REFRESH_MONTHS` (12). The web signs in by swapping the IdP token for an httpOnly `mapema_sid` cookie; writes send `X-CSRF-Token`
 - Encryption: `PII_ENCRYPTION_KEY`, `PII_BLIND_INDEX_KEY`, `STORAGE_ENCRYPTION_KEY`, `STORAGE_DIR`
 - Business: `INVITE_TTL_HOURS`, `QUOTE_TTL_MINUTES`, `BANK_ACCOUNT_COOLING_OFF_HOURS`

@@ -1,0 +1,31 @@
+# DRAFT - ASSUMED LAYOUT - NOT AN OFFICIAL CBK FORMAT - DO NOT SUBMIT
+# template=cbk_return ASSUMED-0.1 status=assumed_draft source="ASSUMPTION - official CBK NDTCP monthly return format not yet supplied (Q-A)"; snapshot=2026-10 v1 sha256=d19942431786fa0f3f84ed461caf213733d408a9818564ad19bdec43be801e50
+section,code,label,value
+A Institution,A01,Lender name (assumed),Mapema
+A Institution,A02,CBK licence number (assumed),CBK licence DEMO-LICENCE-001
+A Institution,A03,Reporting period (assumed),2026-10
+A Institution,A04,Reporting date (month end) (assumed),2026-10-31
+B Portfolio,B01,Number of loans outstanding (assumed),3
+B Portfolio,B02,Gross loans outstanding (principal) (assumed),2080000.00
+B Portfolio,B03,Number of borrowers with loans outstanding (assumed),1
+B Portfolio,B04,Number of loans disbursed in the month (assumed),0
+B Portfolio,B05,Value of loans disbursed in the month (assumed),0.00
+B Portfolio,B06,Principal repaid in the month (assumed),240000.00
+C Income,C01,Interest income received in the month (cash basis) (assumed),21000.00
+C Income,C02,Fee income received in the month (cash basis) (assumed),2500.00
+D Asset quality,D01,Principal current (0 DPD) (assumed),1600000.00
+D Asset quality,D02,Principal 1-30 DPD (assumed),0.00
+D Asset quality,D03,Principal 31-60 DPD (assumed),400000.00
+D Asset quality,D04,Principal 61-90 DPD (assumed),80000.00
+D Asset quality,D05,Principal over 90 DPD (assumed),0.00
+D Asset quality,D06,Non-performing loans (principal) (assumed),80000.00
+D Asset quality,D07,NPL ratio (assumed),3.85
+D Asset quality,D08,Loans written off in the month (principal) (assumed),0.00
+D Asset quality,D09,Interest waived under the in duplum rule in the month (assumed),0.00
+E Concentration,E01,Largest single buyer exposure as % of lending float (assumed),4.16
+E Concentration,E02,Largest single supplier exposure as % of lending float (assumed),4.16
+E Concentration,E03,Largest sector exposure as % of lending float (assumed),4.16
+F Consumer protection,F01,Complaints received in the month (assumed),0
+F Consumer protection,F02,Complaints resolved in the month (assumed),0
+F Consumer protection,F03,Complaints open at month end (assumed),0
+G Pricing,G01,Active pricing version and CBK approval reference (assumed),DEMO-STD / CBK/DEMO/0001

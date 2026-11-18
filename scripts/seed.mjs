@@ -12,6 +12,8 @@
  *     Acme Supermarkets Ltd with a checker, supplier Jua Kali Packaging Ltd, and one eligible
  *     KES 1,000,000 invoice due in 48 days. All names, PINs and numbers are fictitious.
  *
+ *  5. Phase 2: with SEED_DEMO_MONTH=YYYY-MM, a full month of activity instead (see seedDemoMonth).
+ *
  * Usage: DATABASE_ADMIN_URL=... APP_DB_LOGIN_PASSWORD=... [SEED_API_URL=http://localhost:4000] node scripts/seed.mjs
  */
 import pg from 'pg';
@@ -74,19 +76,19 @@ function apiClient(base) {
 const addDays = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 const todayEAT = () => new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10);
 
-export async function seedDemoWorld(base) {
+export async function seedDemoWorld(base, o = {}) {
   const a = apiClient(base);
   const S = (n) => `${n}@mapema.test`;
   const approve = (id, who = 'ceo') => a.post(`/approvals/${id}/approve`, S(who), { reason: 'seed: checked' });
   const settings = await a.get('/admin/settings', S('admin'));
   if (settings.pricing.some((p) => p.code === 'DEMO-STD')) { console.log('demo world already seeded - skipping'); return; }
-  const today = todayEAT();
+  const today = o.today ?? todayEAT();
 
   const pv = await a.post('/admin/pricing-versions', S('admin'), { code: 'DEMO-STD', advanceRateBps: 8000, discountRateBpsPer30d: 350, verificationFeeCents: 250000, minDays: 1, maxDays: 120 });
-  await approve((await a.post(`/admin/pricing-versions/${pv.id}/activate`, S('admin'), { cbkApprovalRef: 'CBK/DEMO/0001', customerNoticeSentAt: new Date().toISOString(), effectiveFrom: today })).id);
-  await approve((await a.post('/admin/float', S('admin'), { amountCents: '1000000000', basisNote: 'DEMO equity KES 10m' })).id);
+  await approve((await a.post(`/admin/pricing-versions/${pv.id}/activate`, S('admin'), { cbkApprovalRef: 'CBK/DEMO/0001', customerNoticeSentAt: `${addDays(today, -30)}T00:00:00Z`, effectiveFrom: today })).id);
+  await approve((await a.post('/admin/float', S('admin'), { amountCents: o.floatCents ?? '1000000000', basisNote: o.floatCents ? 'DEMO equity' : 'DEMO equity KES 10m' })).id);
   await approve((await a.post('/admin/lending/enable', S('admin'), { cbkLicenceNo: 'DEMO-LICENCE-001' })).id);
-  console.log('pricing DEMO-STD (CBK/DEMO/0001), float KES 10,000,000, lending ON (DEMO-LICENCE-001)');
+  console.log(`pricing DEMO-STD (CBK/DEMO/0001), float KES ${(Number(o.floatCents ?? '1000000000') / 100).toLocaleString('en-KE')}, lending ON (DEMO-LICENCE-001)`);
 
   const buyer = await a.post('/organisations', S('ops'), { type: 'buyer', legalName: 'Acme Supermarkets Ltd', kraPin: 'P051234567A', registrationNo: 'PVT-ACME01', sectorCode: 'FMCG' });
   const bi = await a.post('/invitations', S('ops'), { kind: 'buyer_admin', orgId: buyer.id, email: 'ap@acme.test' });
@@ -116,7 +118,7 @@ export async function seedDemoWorld(base) {
   await approve((await a.post(`/bank-accounts/${acct.id}/verify`, S('ops'), { callBackNote: 'DEMO call-back to director' })).id, 'ops2');
   const supOrg = await a.get(`/organisations/${si.orgId}`, S('credit'));
   const linkId = supOrg.supplierLinks[0].id;
-  await approve((await a.post(`/supplier-links/${linkId}/limit`, S('credit'), { limitCents: '100000000', reason: 'DEMO limit KES 1,000,000' })).id, 'credit2');
+  await approve((await a.post(`/supplier-links/${linkId}/limit`, S('credit'), { limitCents: o.supplierLimitCents ?? '100000000', reason: 'DEMO supplier limit' })).id, 'credit2');
   console.log('supplier Jua Kali Packaging Ltd: finance@juakali.test (SMS factor)');
 
   const inv = await a.post('/invoices', 'ap@acme.test', { supplierKraPin: 'P051111111B', invoiceNumber: 'DEMO-INV-0001', amountCents: '100000000', currency: 'KES', issueDate: addDays(today, -2), dueDate: addDays(today, 48), etimsCuInvoiceNo: 'KRACUDEMO0001' });
@@ -125,6 +127,73 @@ export async function seedDemoWorld(base) {
   await a.post(`/dev/esign/${conf.envelopeId}/complete`);
   await a.post('/dev/jobs/run');
   console.log('invoice DEMO-INV-0001 KES 1,000,000 due in 48 days: eligible (the supplier can now get paid early)');
+  return { a, S, approve, buyerId: buyer.id, supplierId: si.orgId, invoiceW: inv.id };
+}
+
+/**
+ * [QA + Compliance] Demo month (Phase 2): SEED_DEMO_MONTH=YYYY-MM builds one full month of activity through the API
+ * on the dev business clock so the month-end snapshot, CBK return (DRAFT), CRB file (DRAFT) and lender pack all come
+ * out of the system with no manual edits. Development only (needs DEV_IDP_ENABLED and the mock ledger/bank).
+ *   Q = 1st of the month two months before. Advances funded at Q: W = worked example (KES 1,000,000, 48 days, paid on
+ *   the due date), E = KES 300,000 due Q+75 and paid on time (in the month), B = KES 500,000 due Q+45 (late -> recourse
+ *   to the supplier at 30 DPD in the month, maker-checker), C = KES 100,000 due Q+21 (short term -> NPL at 30 DPD),
+ *   D = KES 2,000,000 due Q+110 (current at month end).
+ *   Every day: collections (reminders, ladder, NPL), reconciliation for the previous day, accounting push, CRM import,
+ *   and on the 1st the month-end reports. Then the clock is handed back to real time.
+ */
+export async function seedDemoMonth(base, month) {
+  const [y, m] = month.split('-').map(Number);
+  const Q = new Date(Date.UTC(y, m - 3, 1)).toISOString().slice(0, 10);
+  const monthEnd = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  const until = [todayEAT(), addDays(monthEnd, 1)].sort().pop();
+  const clock = (d) => fetch(`${base}/v1/dev/clock`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ iso: d ? `${d}T07:00:00.000Z` : null }) });
+  await clock(Q);
+  try {
+    const w = await seedDemoWorld(base, { today: Q, floatCents: '5000000000', supplierLimitCents: '500000000' });
+    if (!w) return;
+    const { a, S, approve } = w;
+    const sup = 'finance@juakali.test';
+    await a.post('/consents', sup, { orgId: w.supplierId, purpose: 'crb_enquiry_and_reporting', textVersion: 'CRB-2026-11' }, 'sms');
+    await a.post('/dev/bank/fund', undefined, { amountCents: '5000000000', reference: 'EQ-DEMO-0001', valueDate: Q });
+    await a.post('/funding', S('ceo'), { amountCents: '5000000000', source: 'DEMO founder equity', reference: 'EQ-DEMO-0001', valueDate: Q });
+    await approve((await a.post('/reconciliation/baseline', S('ops'), { note: 'DEMO go-live opening balances' })).id, 'ops2');
+    const eligible = async (n, cents, due) => {
+      const i = await a.post('/invoices', 'ap@acme.test', { supplierKraPin: 'P051111111B', invoiceNumber: n, amountCents: cents, currency: 'KES', issueDate: addDays(Q, -2), dueDate: due, etimsCuInvoiceNo: `KRACU${n.replace(/\W/g, '')}` });
+      await a.post(`/invoices/${i.id}/decision`, 'checker@acme.test', { decision: 'approve' });
+      const conf = await a.post('/confirmations', 'checker@acme.test', { invoiceIds: [i.id] });
+      await a.post(`/dev/esign/${conf.envelopeId}/complete`);
+      return i.id;
+    };
+    const fund = async (invoiceId) => {
+      const q = await a.post(`/invoices/${invoiceId}/quote`, sup, {}, 'sms');
+      const acc = await a.post('/advances', sup, { disclosureIds: [q.disclosureId], acceptTerms: true }, 'sms');
+      const id = acc.advances[0].advanceId;
+      await a.post(`/advances/${id}/decision`, S('credit'), { decision: 'approve', reason: 'DEMO checks green' });
+      await a.post(`/advances/${id}/release`, S('ops'));
+      return id;
+    };
+    const plan = { W: ['DEMO-INV-0001', '100000000', addDays(Q, 48)], E: ['DEMO-INV-0005', '30000000', addDays(Q, 75)], B: ['DEMO-INV-0002', '50000000', addDays(Q, 45)],
+      C: ['DEMO-INV-0003', '10000000', addDays(Q, 21)], D: ['DEMO-INV-0004', '200000000', addDays(Q, 110)] };
+    const ids = {};
+    for (const [k, [n, cents, due]] of Object.entries(plan)) ids[k] = await fund(k === 'W' ? w.invoiceW : await eligible(n, cents, due));
+    console.log(`demo month ${month}: funded W/E/B/C/D at ${Q}`);
+    const acct = (await a.get(`/dashboards/buyer?orgId=${w.buyerId}`, 'ap@acme.test')).collectionAccount;
+    const pay = async (k, d) => {
+      await a.post('/dev/bank/credit', undefined, { accountNo: acct, amountCents: plan[k][1], bankRef: `FT-DEMO-${k}`, valueDate: d, payerName: 'ACME SUPERMARKETS LIMITED', narrative: `PAYMENT ${plan[k][0]}` });
+      for (const p of await a.get('/payouts?status=proposed', S('ops'))) await a.post(`/payouts/${p.id}/release`, S('ops'));
+    };
+    for (let d = addDays(Q, 1); d <= until; d = addDays(d, 1)) {
+      await clock(d);
+      if (d === plan.W[2]) await pay('W', d);
+      if (d === plan.E[2]) await pay('E', d);
+      const r = await a.post('/dev/jobs/daily');
+      await a.post('/dev/jobs/run');
+      const due = (await a.get('/recourse-cases', S('credit'))).filter((c) => c.status === 'due' && c.advance_id === ids.B);
+      if (due.length) await approve((await a.post(`/advances/${ids.B}/recourse`, S('credit'), { reason: 'DEMO: buyer 30 days past due, recourse under the master agreement' })).id, 'credit2');
+      if (r.monthEnd) console.log(`month-end ${r.monthEnd.period}: snapshot + CBK (DRAFT) + CRB (DRAFT) + lender pack generated`);
+    }
+    console.log(`demo month ${month} complete through ${until}`);
+  } finally { await clock(null); }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
@@ -132,6 +201,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const adminUrl = env.DATABASE_ADMIN_URL;
   if (!adminUrl) { console.error('DATABASE_ADMIN_URL is required'); process.exit(1); }
   seedDatabase(adminUrl, env.APP_DB_LOGIN_PASSWORD)
-    .then(() => (env.SEED_API_URL ? seedDemoWorld(env.SEED_API_URL) : console.log('SEED_API_URL not set - demo world skipped')))
+    .then(() => (!env.SEED_API_URL ? console.log('SEED_API_URL not set - demo world skipped') : env.SEED_DEMO_MONTH ? seedDemoMonth(env.SEED_API_URL, env.SEED_DEMO_MONTH) : seedDemoWorld(env.SEED_API_URL)))
     .then(() => console.log('seed complete'), (e) => { console.error(e.message); process.exit(1); });
 }
