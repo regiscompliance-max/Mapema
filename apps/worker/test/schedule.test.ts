@@ -28,3 +28,19 @@ describe('worker schedule (EAT)', () => {
     expect(dueJobs(me, new Date('2027-03-02T05:00:00Z'), last)).toEqual([]);
   });
 });
+
+describe('TC-P3-WRK-01 Phase 3 jobs', () => {
+  it('ERP import every 15 minutes and the M-Pesa pending check every 5 minutes are scheduled next to the Phase 2 jobs', async () => {
+    const { buildJobs } = await import('../src/main');
+    const calls: string[] = [];
+    const svc = new Proxy({}, { get: (_t, svcName) => new Proxy({}, { get: (_t2, m) => async () => { calls.push(`${String(svcName)}.${String(m)}`); } }) }) as any;
+    const jobs = buildJobs({ ...svc, clock: { today: () => '2027-01-04' } });
+    const byName = new Map(jobs.map((j) => [j.name, j]));
+    expect(byName.get('erp-import')?.everyMs).toBe(900_000);
+    expect(byName.get('mpesa-pending')?.everyMs).toBe(300_000);
+    for (const n of ['outbox', 'payout-status', 'reconciliation', 'month-end-reports', 'crm-import']) expect(byName.has(n)).toBe(true);
+    await byName.get('erp-import')!.run();
+    await byName.get('mpesa-pending')!.run();
+    expect(calls).toEqual(['erp.runDue', 'mpesa.checkPending']);
+  });
+});

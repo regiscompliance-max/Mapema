@@ -95,3 +95,22 @@ describe('Fineract proof (real Fineract)', () => {
     expect(sum).toBe(0n); // double entry: debits == credits
   }, 60000);
 });
+
+describe('Fineract funding tags (Phase 3 TC-P3U-FUND-04, real Fineract)', () => {
+  it('ensureFund is idempotent; the native fund is set at booking; the current tag lives in a loan datatable and can be re-tagged', async () => {
+    const fa = await ledger.ensureFund('P3-FAC-A', 'Debt facility A (test)');
+    expect(await ledger.ensureFund('P3-FAC-A', 'Debt facility A (test)')).toBe(fa);
+    const eq = await ledger.ensureFund('P3-EQUITY', 'Equity (test)');
+    expect(eq).not.toBe(fa);
+    const q = quote(kes(1_000_000), 48);
+    const { loanId } = await ledger.bookAdvance(ctx, {
+      externalId: `proof-${run}-fund`, clientId, principalCents: q.advanceCents, rateBpsPer30d: 350, days: 48,
+      disbursementDate: disb, dueDate: due, verificationFeeCents: q.verificationFeeCents, fundId: fa,
+    });
+    await ledger.setFundingTag(loanId, 'P3-FAC-A', disb);
+    expect(await ledger.getFundingTag(loanId)).toEqual({ fundId: fa, tagCode: 'P3-FAC-A' });
+    await ledger.setFundingTag(loanId, 'P3-EQUITY', addDays(disb, 5));
+    expect(await ledger.getFundingTag(loanId)).toEqual({ fundId: fa, tagCode: 'P3-EQUITY' }); // fund at origination is immutable once active; the tag moves
+    expect((await ledger.getLoan(loanId)).interestChargedCents).toBe(kes(44_800)); // money unchanged
+  }, 60000);
+});
