@@ -15,6 +15,8 @@ interface MockLoan {
   principalPaid: Cents;
   feesPaid: Cents;
   interestPaid: Cents;
+  interestWaived: Cents;
+  waivers: Set<string>;
   // accrued interest numerator in (cents * bps * days) units, settled at each event
   accruedNum: bigint;
   lastEventDate: string;
@@ -31,6 +33,8 @@ export class MockLedger implements LedgerAdapter {
   private loans = new Map<number, MockLoan>();
   private gl = new Map<LedgerGl, Cents>();
   public failNext: string | null = null; // test hook: 'bookAdvance' | 'repay'
+  /** test hook (Phase 2 COL-03): keep accruing contractual interest after maturity so the in duplum cap can be exercised */
+  public postMaturityInterest = false;
 
   async ensureSetup() {
     return { productId: 1, verificationChargeId: 1 };
@@ -59,7 +63,7 @@ export class MockLedger implements LedgerAdapter {
     if (existing) return { loanId: existing.id, scheduledInterestCents: this.scheduledInterest(existing) };
     const id = this.nextLoan++;
     const loan: MockLoan = {
-      id, externalId: req.externalId, req, principalPaid: 0n, feesPaid: 0n, interestPaid: 0n,
+      id, externalId: req.externalId, req, principalPaid: 0n, feesPaid: 0n, interestPaid: 0n, interestWaived: 0n, waivers: new Set(),
       accruedNum: 0n, lastEventDate: req.disbursementDate, status: 'active', txns: new Map(),
     };
     this.loans.set(id, loan);
@@ -73,7 +77,7 @@ export class MockLedger implements LedgerAdapter {
 
   /** accrue interest on outstanding principal from lastEventDate to `date` (capped at due date) */
   private accrueTo(l: MockLoan, date: string) {
-    const end = date < l.req.dueDate ? date : l.req.dueDate;
+    const end = this.postMaturityInterest || date < l.req.dueDate ? date : l.req.dueDate;
     if (end <= l.lastEventDate) return;
     const days = daysBetween(l.lastEventDate, end);
     l.accruedNum += (l.req.principalCents - l.principalPaid) * BigInt(l.req.rateBpsPer30d) * BigInt(days);
@@ -83,7 +87,9 @@ export class MockLedger implements LedgerAdapter {
   private interestCharged(l: MockLoan, date: string): Cents {
     // before maturity with principal still out, Fineract shows the full schedule; once principal is
     // repaid (or at/after maturity) interest is what actually accrued
-    const accrued = divHalfUp(l.accruedNum, 300000n);
+    let num = l.accruedNum;
+    if (this.postMaturityInterest) { const copy = { ...l }; this.accrueTo(copy, date); num = copy.accruedNum; }
+    const accrued = divHalfUp(num, 300000n);
     if (l.principalPaid < l.req.principalCents && date < l.req.dueDate) return this.scheduledInterest(l);
     return accrued;
   }
@@ -114,7 +120,7 @@ export class MockLedger implements LedgerAdapter {
     l.principalPaid += principal;
     const fees = take(l.req.verificationFeeCents - l.feesPaid);
     l.feesPaid += fees;
-    const interest = take(this.interestCharged(l, date) - l.interestPaid);
+    const interest = take(this.interestCharged(l, date) - l.interestWaived - l.interestPaid);
     l.interestPaid += interest;
     const r: LedgerRepayment = {
       transactionId: this.nextTxn++, amountCents, principalCents: principal, feesCents: fees, penaltiesCents: 0n,
@@ -135,7 +141,7 @@ export class MockLedger implements LedgerAdapter {
     const copy: MockLoan = { ...l };
     this.accrueTo(copy, date);
     // payoff = principal now, interest accrued to date
-    const interest = divHalfUp(copy.accruedNum, 300000n) - l.interestPaid;
+    const interest = divHalfUp(copy.accruedNum, 300000n) - l.interestWaived - l.interestPaid;
     const principal = l.req.principalCents - l.principalPaid;
     const fees = l.req.verificationFeeCents - l.feesPaid;
     return { totalCents: principal + fees + interest, principalCents: principal, feesCents: fees, interestCents: interest };
@@ -147,10 +153,10 @@ export class MockLedger implements LedgerAdapter {
     const interestCharged = this.interestCharged(l, date);
     const p = l.req.principalCents - l.principalPaid;
     const f = l.req.verificationFeeCents - l.feesPaid;
-    const i = interestCharged - l.interestPaid;
+    const i = interestCharged - l.interestWaived - l.interestPaid;
     return {
       loanId, status: l.status, principalOutstandingCents: p, feesOutstandingCents: f, penaltiesOutstandingCents: 0n,
-      interestOutstandingCents: i, interestChargedCents: interestCharged, totalOutstandingCents: p + f + i,
+      interestOutstandingCents: i, interestChargedCents: interestCharged, interestWaivedCents: l.interestWaived, totalOutstandingCents: p + f + i,
     };
   }
 
@@ -173,6 +179,17 @@ export class MockLedger implements LedgerAdapter {
     const out = l.req.principalCents - l.principalPaid;
     this.post('writeOff', 'loanPortfolio', out);
     l.status = 'written_off';
+  }
+
+  async waiveInterest(_ctx: AdapterContext, loanId: number, amountCents: Cents, date: string, _note: string, externalId?: string) {
+    const l = this.mustLoan(loanId);
+    const key = externalId ?? `waive-${date}-${amountCents}`;
+    if (l.waivers.has(key)) return key;
+    const st = await this.getLoan(loanId, date);
+    if (amountCents > st.interestOutstandingCents) throw new AdapterError('ledger-mock', 'HTTP_403', `waiver ${amountCents} exceeds interest outstanding ${st.interestOutstandingCents}`);
+    l.interestWaived += amountCents;
+    l.waivers.add(key);
+    return key;
   }
 
   async health(): Promise<HealthCheck> {

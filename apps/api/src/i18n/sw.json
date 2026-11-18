@@ -19,5 +19,14 @@
   "shortfall.opened.supplier": "Mnunuzi wako amelipa {paid} kwa ankara {invoice} ya {invoice_amount}. Mapema imelipwa; mnunuzi bado anadaiwa {amount} na wewe. Tafadhali fuatilia moja kwa moja - malipo yoyote zaidi atakayofanya kwenye akaunti ya makusanyo yatapelekwa kwako.",
   "shortfall.opened.buyer": "Ankara {invoice}: umelipa {paid} kati ya {invoice_amount}. Bado unadaiwa {amount} na msambazaji wako. Lipa kwenye akaunti yako ya kawaida ya makusanyo ukitaja {invoice}.",
   "shortfall.settled.supplier": "Mnunuzi sasa amelipa salio lililobaki la ankara {invoice}. Hakuna kingine unachodaiwa kwa ankara hii.",
-  "credit.review_due": "Mapitio ya mkopo yanahitajika: {what} ya {org} inatakiwa tarehe {date} ({when}). Fungua Mapema > Mikopo > Kazi za mapitio."
+  "credit.review_due": "Mapitio ya mkopo yanahitajika: {what} ya {org} inatakiwa tarehe {date} ({when}). Fungua Mapema > Mikopo > Kazi za mapitio.",
+  "reminder.pre_due": "Kumbukumbu: ankara {invoice} ({amount}) inatakiwa kulipwa tarehe {due}. Tafadhali lipa kiasi chote kwenye akaunti ya Mapema {account}, kumbukumbu {invoice}.",
+  "reminder.due": "Ankara {invoice} ({amount}) inatakiwa kulipwa leo, {due}. Tafadhali lipa kwenye akaunti ya Mapema {account}, kumbukumbu {invoice}.",
+  "reminder.overdue": "Ankara {invoice} ({amount}) ilitakiwa kulipwa tarehe {due} na imechelewa siku {days}. Tafadhali lipa kwenye akaunti ya Mapema {account}, kumbukumbu {invoice}, au tupigie tukubaliane tarehe.",
+  "reminder.supplier_warning": "Mnunuzi wako bado hajalipa ankara {invoice} (ilitakiwa {due}, imechelewa siku {days}). Kwa mujibu wa makubaliano yenu Mapema inaweza kukuomba urudishe malipo ya awali ikiwa haitalipwa. Tutawasiliana nawe kwanza.",
+  "recourse.demand": "Ankara {invoice} haijalipwa siku {days} baada ya tarehe yake. Kwa mujibu wa makubaliano yako tafadhali lipa {amount} kwenye akaunti ya Mapema {account}, kumbukumbu {invoice}. Tupigie ukitaka kukubaliana mpango.",
+  "recourse.case_due": "Malipo ya awali ya ankara {invoice} yamechelewa siku {days}. Uamuzi wa kudai kwa msambazaji unahitajika (watu wawili).",
+  "collections.npl": "Malipo ya awali ya ankara {invoice} sasa hayafanyi kazi (siku {days} za kuchelewa). Kikomo cha in duplum sasa kinatumika.",
+  "recon.unexplained": "Ulinganisho wa hesabu wa {date}: tofauti {count} zisizoelezwa. Kagua na utatue kwenye lango la wafanyakazi kabla ya kutoa malipo.",
+  "accounting.push_failed": "Jarida la hesabu la kila siku la {date} halikutumwa: {reason}."
 }

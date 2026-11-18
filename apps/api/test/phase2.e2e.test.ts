@@ -11,6 +11,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { addDays } from '@mapema/pricing';
 import { MockAccounting, MockCrm, MockSiteLeadSource } from '@mapema/adapters';
+import { addBusinessDays } from '../src/modules/recon-engine';
 import { Harness, startHarness } from './harness';
 import { AT, buildWorld, eligibleInvoice, fund, LEDGER_ENV, REAL_LEDGER, seedFunding, World, WORKED } from './world';
 
@@ -99,7 +100,7 @@ describe(`Phase 2 [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
     const run = await w.ops.post(`/reconciliation/run?date=${DUE_W}`);
     const by = Object.fromEntries(run.breaks.map((b: any) => [b.item_key, b]));
     expect(by['bank:UNKNOWN-1']).toMatchObject({ classification: 'unexplained', category: 'unknown_bank_item', difference_cents: '700000' });
-    expect(by['bank:LATE-ARRIVAL-1']).toMatchObject({ classification: 'timing', category: 'credit_not_yet_ingested', expected_clear_by: addDays(DUE_W, 1) });
+    expect(by['bank:LATE-ARRIVAL-1']).toMatchObject({ classification: 'timing', category: 'credit_not_yet_ingested', expected_clear_by: addBusinessDays(DUE_W, 1) });
     expect(by['bank:CHG-1']).toMatchObject({ classification: 'explained', category: 'bank_charge', difference_cents: '-2500' });
     expect(by['residual:fineract_vs_platform']).toMatchObject({ classification: 'unexplained', difference_cents: '12345' });
     expect(run).toMatchObject({ status: 'breaks', unexplained_count: 2 });
@@ -114,7 +115,7 @@ describe(`Phase 2 [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
     await w.credit.post(`/approvals/${p1.id}/approve`, {}, 403); // needs ops
     await w.approve(p1.id, w.ops2);
     const p2 = await w.ops.post(`/reconciliation/breaks/${ids.rogueBreak}/resolve`, { resolution: 'explained', carryForward: true, note: 'Test journal posted by QA; reversal booked next day' });
-    await w.approve(p2.id, w.ceo);
+    await w.approve(p2.id, w.ops2);
     const run = await w.ops.post(`/reconciliation/run?date=${DUE_W}`);
     expect(run).toMatchObject({ status: 'explained', unexplained_count: 0 });
     expect(run.breaks.find((b: any) => b.item_key === 'bank:UNKNOWN-1')).toMatchObject({ classification: 'explained', category: 'carried_forward', status: 'explained' });
@@ -125,12 +126,12 @@ describe(`Phase 2 [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
   });
 
   it('TC-P2-REC-06 the next day the un-ingested credit is no longer timing: it is unexplained', async () => {
-    const run = await w.ops.post(`/reconciliation/run?date=${addDays(DUE_W, 2)}`);
+    const run = await w.ops.post(`/reconciliation/run?date=${addBusinessDays(DUE_W, 2)}`);
     expect(run.breaks.find((b: any) => b.item_key === 'bank:LATE-ARRIVAL-1')).toMatchObject({ classification: 'unexplained', category: 'unknown_bank_item' });
     // ingest it (statement import) and rerun: gone
-    h.clock.set(AT(addDays(DUE_W, 2)));
+    h.clock.set(AT(addBusinessDays(DUE_W, 2)));
     await h.http.post('/v1/dev/bank/ingest-statement').send({ bankRef: 'LATE-ARRIVAL-1' }).expect(201);
-    const r2 = await w.ops.post(`/reconciliation/run?date=${addDays(DUE_W, 2)}`);
+    const r2 = await w.ops.post(`/reconciliation/run?date=${addBusinessDays(DUE_W, 2)}`);
     expect(r2.breaks.find((b: any) => b.item_key === 'bank:LATE-ARRIVAL-1')).toBeUndefined();
   });
 

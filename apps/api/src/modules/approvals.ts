@@ -16,7 +16,8 @@ import { AuthUser, CurrentUser, hasRole, Role, Roles, StepUp, STAFF_ROLES } from
 export type ApprovalAction =
   | 'buyer_programme_approve' | 'supplier_limit_set' | 'limit_config_change' | 'float_change' | 'pricing_version_activate'
   | 'payout_release' | 'user_role_change' | 'write_off' | 'manual_payment_match' | 'reconciliation_break_close'
-  | 'etims_override' | 'bank_account_verify' | 'dispute_close' | 'lending_enable';
+  | 'etims_override' | 'bank_account_verify' | 'dispute_close' | 'lending_enable'
+  | 'collections_policy_change' | 'recourse_start' | 'reconciliation_baseline_set' | 'reconciliation_break_resolve' | 'report_template_activate';
 
 export interface ApprovalRow {
   id: string; action: ApprovalAction; entity_type: string; entity_id: string; payload: any; maker_id: string; required_role: Role; status: string;

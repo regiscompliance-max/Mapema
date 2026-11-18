@@ -100,7 +100,7 @@ describe('public site API', () => {
   });
   it('health reports every provider adapter and its mode', async () => {
     const r = await h.http.get('/v1/public/health').expect(200);
-    expect(r.body.providers.map((p: any) => p.name).sort()).toEqual(['bank', 'crb', 'email', 'esign', 'etims', 'kyc', 'ledger', 'sms']);
+    expect(r.body.providers.map((p: any) => p.name).sort()).toEqual(['accounting', 'bank', 'crb', 'crm', 'email', 'esign', 'etims', 'kyc', 'leads', 'ledger', 'sms']);
     expect(r.body.providers.every((p: any) => p.mode === 'mock')).toBe(true);
   });
 });

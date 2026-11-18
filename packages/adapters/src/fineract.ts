@@ -261,12 +261,21 @@ export class FineractLedger implements LedgerAdapter {
       penaltiesOutstandingCents: decimalToCents(s.penaltyChargesOutstanding),
       interestOutstandingCents: decimalToCents(s.interestOutstanding),
       interestChargedCents: decimalToCents(s.interestCharged),
+      interestWaivedCents: decimalToCents(s.interestWaived ?? 0),
       totalOutstandingCents: decimalToCents(s.totalOutstanding),
     };
   }
 
   async writeOff(_ctx: AdapterContext, loanId: number, date: string, note: string) {
     await this.call('POST', `/loans/${loanId}/transactions?command=writeoff`, { transactionDate: date, note, ...FineractLedger.D });
+  }
+
+  /** In duplum waiver (COL-03): Fineract `waiveinterest` loan transaction; principal is untouched. */
+  async waiveInterest(_ctx: AdapterContext, loanId: number, amountCents: Cents, date: string, note: string, externalId?: string) {
+    const r = await this.call('POST', `/loans/${loanId}/transactions?command=waiveinterest`, {
+      transactionDate: date, transactionAmount: centsToDecimal(amountCents), note, ...(externalId ? { externalId } : {}), ...FineractLedger.D,
+    });
+    return String(r.resourceId ?? r.transactionId ?? '');
   }
 
   /** Manual journal for money that is not loan repayment (supplier deferred price, float funding, refunds). */

@@ -35,16 +35,28 @@ export interface BankCredit {
   narrative?: string;
 }
 
+/** One line of the collection/disbursement account statement. Amount is signed: + money in, - money out. */
+export interface StatementLine {
+  bankRef: string;
+  valueDate: string;
+  amountCents: Cents;
+  type: 'credit' | 'debit' | 'return' | 'charge' | 'interest';
+  accountNo?: string;
+  narrative?: string;
+}
+
 export interface BankAdapter {
   readonly mode: AdapterMode;
   readonly bankCode: string;
   openVirtualAccount(ctx: AdapterContext, buyer: { id: string; legalName: string }): Promise<{ virtualAccountNo: string }>;
-  sendPayout(ctx: AdapterContext, p: PayoutInstruction): Promise<{ bankRef: string; status: BankPayoutStatus; failureReason?: string }>;
+  sendPayout(ctx: AdapterContext, p: PayoutInstruction, valueDate?: string): Promise<{ bankRef: string; status: BankPayoutStatus; failureReason?: string }>;
   getPayoutStatus(bankRef: string): Promise<{ status: BankPayoutStatus; failureReason?: string }>;
   verifyWebhook(rawBody: string, headers: Record<string, string | undefined>): boolean;
   parseWebhook(rawBody: string): BankCredit;
   parseStatement(csv: string): BankCredit[];
   getBalance(accountNo?: string): Promise<Cents>;
+  /** Statement lines with value date in [from, to] (Phase 2 REC-02 itemised reconciliation). */
+  getStatement(from: string, to: string): Promise<StatementLine[]>;
   health(): Promise<HealthCheck>;
 }
 
@@ -67,9 +79,11 @@ export class MockBank implements BankAdapter {
   readonly mode = 'mock' as const;
   readonly bankCode = 'MOCKBANK';
   private seq = 1;
-  private payouts = new Map<string, { bankRef: string; status: BankPayoutStatus; failureReason?: string; p: PayoutInstruction }>();
+  private payouts = new Map<string, { bankRef: string; status: BankPayoutStatus; failureReason?: string; p: PayoutInstruction; valueDate?: string }>();
   private balance = 0n;
   readonly sent: PayoutInstruction[] = [];
+  readonly statement: StatementLine[] = [];
+  private today = () => new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10);
 
   constructor(private readonly webhookSecret = 'mock-bank-webhook-secret') {}
 
@@ -77,7 +91,7 @@ export class MockBank implements BankAdapter {
     return { virtualAccountNo: `MAP${buyer.id.replace(/-/g, '').slice(0, 10).toUpperCase()}` };
   }
 
-  async sendPayout(_ctx: AdapterContext, p: PayoutInstruction) {
+  async sendPayout(_ctx: AdapterContext, p: PayoutInstruction, valueDate?: string) {
     if (p.currency !== 'KES') throw new AdapterError('bank-mock', 'CURRENCY_NOT_SUPPORTED', 'KES only');
     const prior = this.payouts.get(p.idempotencyKey);
     if (prior) return { bankRef: prior.bankRef, status: prior.status, failureReason: prior.failureReason };
@@ -92,7 +106,8 @@ export class MockBank implements BankAdapter {
     }
     this.balance -= p.amountCents;
     this.sent.push(p);
-    this.payouts.set(p.idempotencyKey, { bankRef, status: 'sent', p });
+    this.statement.push({ bankRef, valueDate: valueDate ?? this.today(), amountCents: -p.amountCents, type: 'debit', narrative: p.narrative });
+    this.payouts.set(p.idempotencyKey, { bankRef, status: 'sent', p, valueDate: valueDate ?? this.today() });
     return { bankRef, status: 'sent' as const };
   }
 
@@ -104,6 +119,7 @@ export class MockBank implements BankAdapter {
         rec.status = 'returned';
         rec.failureReason = 'BENEFICIARY_NAME_MISMATCH';
         this.balance += rec.p.amountCents;
+        this.statement.push({ bankRef: `${bankRef}-R`, valueDate: rec.valueDate ?? this.today(), amountCents: rec.p.amountCents, type: 'return', narrative: 'Returned payout' });
       } else rec.status = 'confirmed';
     }
     return { status: rec.status, failureReason: rec.failureReason };
@@ -126,13 +142,24 @@ export class MockBank implements BankAdapter {
     return parseStatementCsv(this.bankCode, csv);
   }
 
-  /** test/dev hook: money arriving in the collection account */
-  creditReceived(amountCents: Cents) {
+  /** test/dev hook: money arriving in the account (appears on the statement with this reference) */
+  creditReceived(amountCents: Cents, o: { bankRef?: string; valueDate?: string; accountNo?: string; narrative?: string } = {}) {
     this.balance += amountCents;
+    this.statement.push({ bankRef: o.bankRef ?? `MCR${String(this.seq++).padStart(8, '0')}`, valueDate: o.valueDate ?? this.today(), amountCents, type: 'credit', accountNo: o.accountNo, narrative: o.narrative });
+  }
+
+  /** test/dev hook: the bank debits a charge */
+  bankCharge(amountCents: Cents, bankRef: string, valueDate: string, narrative = 'Bank charge') {
+    this.balance -= amountCents;
+    this.statement.push({ bankRef, valueDate, amountCents: -amountCents, type: 'charge', narrative });
   }
 
   async getBalance() {
     return this.balance;
+  }
+
+  async getStatement(from: string, to: string) {
+    return this.statement.filter((l) => l.valueDate >= from && l.valueDate <= to).map((l) => ({ ...l }));
   }
 
   async health(): Promise<HealthCheck> {
@@ -150,5 +177,6 @@ export class UnconfiguredBank implements BankAdapter {
   parseWebhook(): never { return notConfigured('bank', this.mode); }
   parseStatement(csv: string) { return parseStatementCsv(this.bankCode, csv); }
   getBalance(): never { return notConfigured('bank', this.mode); }
+  async getStatement(): Promise<StatementLine[]> { return notConfigured('bank', this.mode); }
   async health(): Promise<HealthCheck> { return { provider: 'bank', mode: this.mode, ok: false, detail: 'provider not contracted' }; }
 }

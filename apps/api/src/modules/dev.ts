@@ -17,7 +17,10 @@ import { DevIdp } from '../auth/dev-idp';
 import { AdvancesService } from './advances';
 import { CreditReviewService } from './credit-reviews';
 import { OnboardingService } from './onboarding';
-import { OpsService } from './ops';
+import { CollectionsService } from './collections';
+import { IntegrationsService } from './integrations';
+import { ReconciliationService } from './reconciliation';
+import { RegulatoryService } from './regulatory';
 import { PaymentsService } from './payments';
 
 @Controller()
@@ -25,8 +28,9 @@ import { PaymentsService } from './payments';
 export class DevController {
   constructor(
     private readonly idp: DevIdp, private readonly db: Db, private readonly clock: Clock, private readonly outbox: Outbox,
-    private readonly onboarding: OnboardingService, private readonly payments: PaymentsService, private readonly ops: OpsService, private readonly advances: AdvancesService,
-    private readonly reviews: CreditReviewService,
+    private readonly onboarding: OnboardingService, private readonly payments: PaymentsService, private readonly collections: CollectionsService, private readonly advances: AdvancesService,
+    private readonly reviews: CreditReviewService, private readonly recon: ReconciliationService, private readonly regulatory: RegulatoryService,
+    private readonly integrations: IntegrationsService,
     @Inject(ADAPTERS) private readonly adapters: Adapters,
   ) {}
 
@@ -63,25 +67,51 @@ export class DevController {
       payerName: z.string().optional(), narrative: z.string().optional() }).parse(b);
     const bank = this.adapters.bank;
     if (!(bank instanceof MockBank)) throw new DomainError(400, 'NOT_MOCK', 'bank adapter is not in mock mode');
-    bank.creditReceived(BigInt(body.amountCents));
+    bank.creditReceived(BigInt(body.amountCents), { bankRef: body.bankRef, valueDate: body.valueDate, accountNo: body.accountNo, narrative: body.narrative });
     return this.payments.ingest({ bankCode: bank.bankCode, accountNo: body.accountNo, bankRef: body.bankRef, valueDate: body.valueDate, amountCents: BigInt(body.amountCents), currency: 'KES', payerName: body.payerName, narrative: body.narrative }, 'webhook');
   }
 
   /** Simulates equity landing in the disbursement account (record it with POST /funding). */
   @Post('dev/bank/fund')
   fund(@Body() b: unknown) {
-    const { amountCents } = z.object({ amountCents: z.union([z.string().regex(/^\d+$/), z.number().int().positive()]) }).parse(b);
+    const { amountCents, reference, valueDate } = z.object({ amountCents: z.union([z.string().regex(/^\d+$/), z.number().int().positive()]), reference: z.string().min(3).max(64).optional(), valueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).parse(b);
     const bank = this.adapters.bank;
     if (!(bank instanceof MockBank)) throw new DomainError(400, 'NOT_MOCK', 'bank adapter is not in mock mode');
-    bank.creditReceived(BigInt(amountCents));
+    bank.creditReceived(BigInt(amountCents), { bankRef: reference, valueDate: valueDate ?? this.clock.today(), narrative: 'Funding' });
     return { ok: true };
+  }
+
+  /** Simulates the statement import of a line that is already on the mock bank statement (REC-06). */
+  @Post('dev/bank/ingest-statement')
+  async ingestStatement(@Body() b: unknown) {
+    const { bankRef } = z.object({ bankRef: z.string().min(3) }).parse(b);
+    const bank = this.adapters.bank;
+    if (!(bank instanceof MockBank)) throw new DomainError(400, 'NOT_MOCK', 'bank adapter is not in mock mode');
+    const line = bank.statement.find((l) => l.bankRef === bankRef && l.amountCents > 0n);
+    if (!line) throw notFound('Statement line');
+    return this.payments.ingest({ bankCode: bank.bankCode, accountNo: line.accountNo ?? 'MOCK-COLLECTION', bankRef, valueDate: line.valueDate, amountCents: line.amountCents, currency: 'KES', narrative: line.narrative }, 'statement_import');
+  }
+
+  /** Runs the daily worker jobs once for the business clock (collections, reconciliation for yesterday, accounting, CRM, month end). */
+  @Post('dev/jobs/daily')
+  async daily() {
+    const today = this.clock.today();
+    const y = new Date(`${today}T00:00:00Z`); y.setUTCDate(y.getUTCDate() - 1);
+    const yesterday = y.toISOString().slice(0, 10);
+    return {
+      collections: await this.collections.runDaily(today),
+      reconciliation: await this.recon.reconcile(yesterday),
+      accounting: await this.integrations.pushDailyJournal(yesterday),
+      crm: await this.integrations.importLeads(),
+      monthEnd: await this.regulatory.monthEnd(today),
+    };
   }
 
   @Post('dev/jobs/run')
   async jobs() {
     const outbox = await this.outbox.processDue(100);
     const held = await this.payments.postHeld();
-    const ladder = await this.ops.runLateLadder();
+    const ladder = await this.collections.runDaily();
     const payouts = await this.advances.refreshPayoutStatuses();
     const reviews = await this.reviews.run();
     return { outbox, held, ladder, payouts, reviews };

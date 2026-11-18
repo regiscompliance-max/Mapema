@@ -37,6 +37,7 @@ export interface LedgerLoanState {
   penaltiesOutstandingCents: Cents;
   interestOutstandingCents: Cents;
   interestChargedCents: Cents;
+  interestWaivedCents?: Cents;
   totalOutstandingCents: Cents;
 }
 
@@ -58,10 +59,12 @@ export interface LedgerAdapter {
   undoDisbursal(ctx: AdapterContext, loanId: number): Promise<void>;
   repay(ctx: AdapterContext, loanId: number, amountCents: Cents, date: string, externalId: string): Promise<LedgerRepayment>;
   payoffQuote(loanId: number, date: string): Promise<{ totalCents: Cents; principalCents: Cents; feesCents: Cents; interestCents: Cents }>;
-  getLoan(loanId: number): Promise<LedgerLoanState>;
+  getLoan(loanId: number, asOf?: string): Promise<LedgerLoanState>;
   postJournal(ctx: AdapterContext, j: { date: string; debit: LedgerGl; credit: LedgerGl; amountCents: Cents; reference: string; note: string }): Promise<string>;
   glBalance(key: LedgerGl): Promise<Cents>;
   trialBalance(): Promise<Record<LedgerGl, Cents>>;
   writeOff(ctx: AdapterContext, loanId: number, date: string, note: string): Promise<void>;
+  /** Waive interest (Phase 2 COL-03 in duplum cap). Never touches principal. Idempotent per externalId. */
+  waiveInterest(ctx: AdapterContext, loanId: number, amountCents: Cents, date: string, note: string, externalId?: string): Promise<string>;
   health(): Promise<HealthCheck>;
 }

@@ -56,7 +56,8 @@ export class AdvancesService implements OnModuleInit {
       const adv = (await c.query(`SELECT * FROM advance WHERE id = $1 FOR UPDATE`, [a.entity_id])).rows[0];
       if (!adv?.fineract_loan_id) throw conflict('NOT_FUNDED', 'Only funded advances can be written off');
       await this.adapters.ledger.writeOff({ requestId: a.id }, Number(adv.fineract_loan_id), this.clock.today(), a.payload.reason);
-      await c.query(`UPDATE advance SET status = 'written_off', updated_at = now() WHERE id = $1`, [a.entity_id]);
+      await c.query(`UPDATE advance SET status = 'written_off', written_off_on = $2, updated_at = now() WHERE id = $1`, [a.entity_id, this.clock.today()]);
+      await c.query(`UPDATE recourse_case SET status = 'closed_written_off', closed_on = $2 WHERE advance_id = $1 AND status IN ('due','demanded')`, [a.entity_id, this.clock.today()]);
       await c.query(`INSERT INTO collection_action (advance_id, stage, channel, outcome) VALUES ($1,'write_off','system',$2)`, [a.entity_id, a.payload.reason]);
     });
   }
@@ -302,7 +303,7 @@ export class AdvancesService implements OnModuleInit {
         idempotencyKey: payout.idempotency_key, amountCents: toCents(payout.amount_cents), currency: 'KES', rail: payout.rail ?? 'pesalink',
         narrative: `Mapema advance ${a.invoice_number}`.slice(0, 35),
         beneficiary: { bankCode: payout.bank_code, accountNumber: this.crypto.decrypt(payout.account_number_enc)!, accountName: payout.account_name },
-      });
+      }, today);
     } catch (e) {
       if (e instanceof AdapterError && e.retryable) throw e; // outbox retries; ledger booking is idempotent
       bank = { bankRef: '', status: 'failed', failureReason: (e as Error).message.slice(0, 200) };
@@ -321,7 +322,7 @@ export class AdvancesService implements OnModuleInit {
     // 3. funded + notice of assignment + alerts
     const acct = await this.db.one(`SELECT virtual_account_no FROM collection_account WHERE buyer_id = $1`, [a.buyer_id]);
     await this.db.tx(async (c) => {
-      await c.query(`UPDATE payout SET bank_ref = $2 WHERE id = $1`, [payout.id, bank.bankRef]);
+      await c.query(`UPDATE payout SET bank_ref = $2, value_date = $3 WHERE id = $1`, [payout.id, bank.bankRef, today]);
       await c.query(`UPDATE advance SET status = 'funded', disbursed_at = now(), mirror_principal_outstanding_cents = principal_cents, mirror_refreshed_at = now(), updated_at = now() WHERE id = $1`, [advanceId]);
       await c.query(`UPDATE invoice SET status = 'funded', updated_at = now() WHERE id = $1`, [a.invoice_id]);
       const notice = simplePdf('Notice of Assignment', [

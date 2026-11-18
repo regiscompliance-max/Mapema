@@ -31,8 +31,14 @@ import { CreditReviewController, CreditReviewService } from './modules/credit-re
 import { SelfService, SelfServiceController } from './modules/self-service';
 import { PublicController, PublicService } from './modules/public';
 import { ReportsController, ReportsService } from './modules/reports';
+import { CollectionsController, CollectionsService } from './modules/collections';
+import { ReconciliationController, ReconciliationService } from './modules/reconciliation';
+import { RegulatoryController, RegulatoryService } from './modules/regulatory';
+import { DashboardsController, DashboardsService } from './modules/dashboards';
+import { IntegrationsController, IntegrationsService } from './modules/integrations';
 
-export const CONTROLLERS = [AuthSessionController, PublicController, OnboardingController, InvoicesController, AdvancesController, PaymentsController, CreditReviewController, SelfServiceController, OpsController, ApprovalsController, AdminController, ReportsController];
+export const CONTROLLERS = [AuthSessionController, PublicController, OnboardingController, InvoicesController, AdvancesController, PaymentsController, CreditReviewController, SelfServiceController, OpsController, ApprovalsController, AdminController, ReportsController,
+  CollectionsController, ReconciliationController, RegulatoryController, DashboardsController, IntegrationsController];
 
 export interface AppOverrides { adapters?: Adapters; storage?: StorageAdapter }
 
@@ -50,12 +56,13 @@ export class AppModule implements NestModule {
         { provide: STORAGE, useValue: o.storage ?? (cfg.APP_ENV === 'test' ? new MemoryStorage() : new LocalEncryptedStorage(cfg.STORAGE_DIR, cfg.STORAGE_ENCRYPTION_KEY)) },
         Db, Clock, Audit, FieldCrypto, Outbox, Notifier, Idempotency, DevIdp, TokenVerifier, Identity, Sessions,
         ApprovalsService, SettingsService, DocumentsService, OnboardingService, InvoicesService, AdvancesService, PaymentsService, OpsService, ReportsService, PublicService, CreditReviewService, SelfService,
+        CollectionsService, ReconciliationService, RegulatoryService, DashboardsService, IntegrationsService,
         ...(cfg.RATE_LIMIT_STORE === 'postgres' ? [{ provide: ThrottlerStorage, useClass: PgThrottlerStorage }] : []),
         { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_FILTER, useClass: ProblemFilter },
       ],
-      exports: [Db, Clock, Outbox, PaymentsService, OpsService, AdvancesService, CreditReviewService, ADAPTERS],
+      exports: [Db, Clock, Outbox, PaymentsService, OpsService, AdvancesService, CreditReviewService, CollectionsService, ReconciliationService, RegulatoryService, IntegrationsService, ADAPTERS],
     };
   }
 

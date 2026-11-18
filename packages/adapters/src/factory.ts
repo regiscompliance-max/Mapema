@@ -9,6 +9,9 @@ import { FineractLedger } from './fineract';
 import { LedgerAdapter } from './ledger';
 import { MockLedger } from './ledger.mock';
 import { AfricasTalkingSms, EmailAdapter, MockEmail, MockSms, PostmarkEmail, SmsAdapter } from './messaging';
+import { AccountingAdapter, MockAccounting, XeroAccounting } from './accounting';
+import { CrmAdapter, HubSpotCrm, MockCrm } from './crm';
+import { D1SiteLeadSource, LeadSourceAdapter, MockSiteLeadSource } from './leads';
 import { CrbAdapter, EtimsAdapter, KycAdapter, MockCrb, MockEtims, MockKyc, UnconfiguredCrb, UnconfiguredEtims, UnconfiguredKyc } from './verification';
 
 export interface Adapters {
@@ -20,6 +23,9 @@ export interface Adapters {
   esign: EsignAdapter;
   sms: SmsAdapter;
   email: EmailAdapter;
+  accounting: AccountingAdapter;
+  crm: CrmAdapter;
+  leads: LeadSourceAdapter;
 }
 
 function mode(env: Record<string, string | undefined>, name: string): AdapterMode {
@@ -48,6 +54,9 @@ export function createAdapters(env: Record<string, string | undefined>): Adapter
   const crbMode = mode(env, 'CRB');
   const kycMode = mode(env, 'KYC');
   const esignMode = mode(env, 'ESIGN');
+  const accountingMode = mode(env, 'ACCOUNTING');
+  const crmMode = mode(env, 'CRM');
+  const leadsMode = mode(env, 'SITE_LEADS');
   return {
     ledger,
     bank: bankMode === 'mock' ? new MockBank(env.BANK_WEBHOOK_SECRET) : new UnconfiguredBank(bankMode),
@@ -57,5 +66,8 @@ export function createAdapters(env: Record<string, string | undefined>): Adapter
     esign: esignMode === 'mock' ? new MockEsign(env.ESIGN_WEBHOOK_SECRET, env.ESIGN_MOCK_AUTOCOMPLETE === 'true') : new UnconfiguredEsign(esignMode),
     sms: smsMode === 'mock' ? new MockSms() : new AfricasTalkingSms(smsMode, { username: env.AT_USERNAME ?? 'sandbox', apiKey: env.AT_API_KEY ?? '', senderId: env.AT_SENDER_ID }),
     email: emailMode === 'mock' ? new MockEmail() : new PostmarkEmail(emailMode, { serverToken: env.POSTMARK_SERVER_TOKEN ?? '', from: env.EMAIL_FROM ?? 'no-reply@mapema.co.ke' }),
+    accounting: accountingMode === 'mock' ? new MockAccounting() : new XeroAccounting(accountingMode, { accessToken: env.XERO_ACCESS_TOKEN ?? '', tenantId: env.XERO_TENANT_ID ?? '' }),
+    crm: crmMode === 'mock' ? new MockCrm() : new HubSpotCrm(crmMode, { token: env.HUBSPOT_PRIVATE_APP_TOKEN ?? '', pipelineId: env.HUBSPOT_BUYER_PIPELINE_ID, dealStageId: env.HUBSPOT_BUYER_DEAL_STAGE_ID }),
+    leads: leadsMode === 'mock' ? new MockSiteLeadSource() : new D1SiteLeadSource(leadsMode, { accountId: env.SITE_D1_ACCOUNT_ID ?? '', databaseId: env.SITE_D1_DATABASE_ID ?? '', token: env.SITE_D1_API_TOKEN ?? '' }),
   };
 }

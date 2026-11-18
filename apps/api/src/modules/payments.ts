@@ -159,8 +159,12 @@ export class PaymentsService implements OnModuleInit {
       }
       await this.inDuplumGuard(c, a.id, toCents(a.principal_cents), paymentId);
       if (closed) {
-        await c.query(`UPDATE advance SET status = 'settled', updated_at = now() WHERE id = $1`, [a.id]);
+        await c.query(`UPDATE advance SET status = 'settled', settled_on = $2, updated_at = now() WHERE id = $1`, [a.id, p.value_date]);
         await c.query(`UPDATE invoice SET status = 'settled', updated_at = now() WHERE id = $1`, [a.invoice_id]);
+        await c.query(`UPDATE recourse_case SET status = 'closed_repaid', closed_on = $2 WHERE advance_id = $1 AND status IN ('due','demanded')`, [a.id, p.value_date]);
+        // Phase 2 ACC-02 fee-invoice hook: DISABLED until tax advice (D-24); records that it fired
+        const feeInv = (await c.query(`SELECT value FROM platform_setting WHERE key = 'fee_invoices_enabled'`)).rows[0]?.value === true;
+        await c.query(`INSERT INTO fee_invoice_hook (advance_id, status) VALUES ($1,$2) ON CONFLICT (advance_id) DO NOTHING`, [a.id, feeInv ? 'queued' : 'skipped_disabled']);
       }
       if (closed) await this.trackShortfall(c, a);
       let payoutId: string | null = null;
@@ -294,14 +298,14 @@ export class PaymentsService implements OnModuleInit {
     const r = await this.adapters.bank.sendPayout(ctx, {
       idempotencyKey: p.idempotency_key, amountCents: toCents(p.amount_cents), currency: 'KES', rail: 'pesalink', narrative: `Mapema balance ${inv.invoice_number}`.slice(0, 35),
       beneficiary: { bankCode: ba.bank_code, accountNumber: this.crypto.decrypt(ba.account_number_enc)!, accountName: ba.account_name },
-    });
+    }, this.clock.today());
     await this.db.tx(async (c) => {
       if (r.status === 'failed') {
         await c.query(`UPDATE payout SET status = 'failed', failure_reason = $2, bank_ref = $3 WHERE id = $1`, [payoutId, r.failureReason, r.bankRef]);
         await this.audit.record(c, SYSTEM, 'payout.balance.failed', 'payout', payoutId, null, { reason: r.failureReason });
         return;
       }
-      await c.query(`UPDATE payout SET bank_ref = $2 WHERE id = $1`, [payoutId, r.bankRef]);
+      await c.query(`UPDATE payout SET bank_ref = $2, value_date = $3 WHERE id = $1`, [payoutId, r.bankRef, this.clock.today()]);
       await this.notifier.toOrg(c, inv.supplier_id, 'payout.balance_sent', { amount: formatKes(toCents(p.amount_cents)), invoice: inv.invoice_number, ref: r.bankRef }, { type: 'payout', id: payoutId });
     });
     if (r.status !== 'failed') {

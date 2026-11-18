@@ -8,3 +8,7 @@ export * from './modules/payments';
 export * from './modules/ops';
 export * from './modules/advances';
 export * from './modules/credit-reviews';
+export * from './modules/collections';
+export * from './modules/reconciliation';
+export * from './modules/regulatory';
+export * from './modules/integrations';

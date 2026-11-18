@@ -6,7 +6,6 @@
 import { Body, Controller, Get, Inject, Injectable, OnModuleInit, Param, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
 import type { Adapters } from '@mapema/adapters';
-import { daysBetween, formatKes, nplDaysFor } from '@mapema/pricing';
 import { Audit, SYSTEM } from '../common/audit';
 import { ADAPTERS } from '../common/config';
 import { Clock } from '../common/clock';
@@ -36,59 +35,9 @@ export class OpsService implements OnModuleInit {
         [a.entity_id, a.payload.outcome, a.payload.resolution, a.id]);
       await c.query(`UPDATE invoice SET status = $2, updated_at = now() WHERE id = $1 AND status = 'disputed'`, [a.payload.invoiceId, a.payload.restoreStatus]);
     });
-    this.approvals.register('reconciliation_break_close', async (c, a) => {
-      await c.query(`UPDATE reconciliation_break SET status = 'closed', resolution_note = $2, closed_via = $3 WHERE id = $1`, [a.entity_id, a.payload.note, a.id]);
-    });
   }
 
-  // ------------------------------------------------------------------ late ladder (OPS-08)
-  async runLateLadder(today = this.clock.today()) {
-    const rows = await this.db.query(
-      `SELECT a.id, a.status, a.term_days, a.buyer_id, a.supplier_id, a.due_date, i.invoice_number, i.amount_cents, ca.virtual_account_no,
-              (SELECT array_agg(stage) FROM collection_action x WHERE x.advance_id = a.id) AS done
-       FROM advance a JOIN invoice i ON i.id = a.invoice_id LEFT JOIN collection_account ca ON ca.buyer_id = a.buyer_id
-       WHERE a.status IN ('funded','late','recourse') AND a.due_date < $1`, [today]);
-    const actions: { advanceId: string; stage: string }[] = [];
-    for (const r of rows) {
-      const late = daysBetween(r.due_date, today);
-      const done: string[] = r.done ?? [];
-      await this.db.tx(async (c) => {
-        const step = async (stage: string, channel: string, outcome: string) => {
-          if (done.includes(stage)) return;
-          await c.query(`INSERT INTO collection_action (advance_id, stage, channel, outcome) VALUES ($1,$2,$3,$4)`, [r.id, stage, channel, outcome]);
-          await this.audit.record(c, SYSTEM, `collections.${stage}`, 'advance', r.id, null, { daysLate: late });
-          actions.push({ advanceId: r.id, stage });
-        };
-        if (r.status === 'funded') await c.query(`UPDATE advance SET status = 'late', updated_at = now() WHERE id = $1`, [r.id]);
-        if (late >= 1 && !done.includes('d1_reminder')) {
-          const params = { invoice: r.invoice_number, amount: formatKes(toCents(r.amount_cents)), due: r.due_date, account: r.virtual_account_no ?? '-' };
-          await this.notifier.toOrg(c, r.buyer_id, 'late.d1_reminder', params, { type: 'advance', id: r.id });
-          await step('d1_reminder', 'system', 'reminder sent to buyer');
-        }
-        if (late >= 7) await step('d7_call', 'system', 'task: ops to call buyer AP');
-        if (late >= 14) await step('d14_demand', 'system', 'task: ops to issue demand letter (template needs counsel sign-off)');
-        if (late >= 30) await step('d30_recourse', 'system', 'task: credit to decide recourse to supplier');
-        if (late >= nplDaysFor(r.term_days ?? 120) && r.status !== 'non_performing') {
-          await c.query(`UPDATE advance SET status = 'non_performing', updated_at = now() WHERE id = $1`, [r.id]);
-          await step('npl', 'system', 'classified non-performing; in duplum cap applies; no further charges accrue');
-        }
-        if (late >= 7 && !done.includes('d7_call')) await this.notifier.toRole(c, 'ops', 'late.d1_reminder', { invoice: r.invoice_number, amount: formatKes(toCents(r.amount_cents)), due: r.due_date, account: r.virtual_account_no ?? '-' });
-      });
-    }
-    return { checked: rows.length, actions };
-  }
-
-  async recourse(u: AuthUser, advanceId: string, reason: string) {
-    return this.db.tx(async (c) => {
-      const a = (await c.query(`SELECT status FROM advance WHERE id = $1 FOR UPDATE`, [advanceId])).rows[0];
-      if (!a) throw notFound('Advance');
-      if (a.status !== 'late') throw conflict('BAD_STATE', 'Recourse only on late advances');
-      await c.query(`UPDATE advance SET status = 'recourse', updated_at = now() WHERE id = $1`, [advanceId]);
-      await c.query(`INSERT INTO collection_action (advance_id, stage, channel, performed_by, outcome) VALUES ($1,'d30_recourse','letter',$2,$3)`, [advanceId, u.id, reason]);
-      await this.audit.record(c, u.actor, 'advance.recourse', 'advance', advanceId, { status: 'late' }, { status: 'recourse', reason });
-      return { id: advanceId, status: 'recourse' };
-    });
-  }
+  // late ladder + recourse moved to collections.ts (Phase 2 COL-01..05)
 
   async addCollectionNote(u: AuthUser, advanceId: string, b: { channel: string; outcome: string }) {
     return this.db.tx(async (c) => {
@@ -208,37 +157,7 @@ export class OpsService implements OnModuleInit {
     });
   }
 
-  // ------------------------------------------------------------------ reconciliation (OPS-06)
-  async reconcile(date = this.clock.today()) {
-    const bank = await this.adapters.bank.getBalance();
-    const fineract = await this.adapters.ledger.glBalance('bank');
-    const p = await this.db.one(`SELECT
-        (SELECT COALESCE(SUM(CASE WHEN direction = 'in' THEN amount_cents ELSE -amount_cents END),0) FROM funding_movement)::bigint AS funding,
-        (SELECT COALESCE(SUM(amount_cents),0) FROM bank_transaction)::bigint AS credits,
-        (SELECT COALESCE(SUM(amount_cents),0) FROM payout WHERE status IN ('released','confirmed') AND bank_ref IS NOT NULL)::bigint AS payouts`);
-    const platform = toCents(p.funding) + toCents(p.credits) - toCents(p.payouts);
-    const balanced = bank === fineract && fineract === platform;
-    return this.db.tx(async (c) => {
-      const run = (await c.query(`INSERT INTO reconciliation_run (as_of_date, bank_balance_cents, fineract_cash_cents, platform_cash_cents, status) VALUES ($1,$2,$3,$4,$5)
-        ON CONFLICT (as_of_date) DO UPDATE SET bank_balance_cents = EXCLUDED.bank_balance_cents, fineract_cash_cents = EXCLUDED.fineract_cash_cents,
-          platform_cash_cents = EXCLUDED.platform_cash_cents, status = CASE WHEN reconciliation_run.status = 'breaks' AND EXISTS (SELECT 1 FROM reconciliation_break b WHERE b.run_id = reconciliation_run.id AND b.status = 'open') THEN 'breaks' ELSE EXCLUDED.status END, ran_at = now()
-        RETURNING *`, [date, bank, fineract, platform, balanced ? 'balanced' : 'breaks'])).rows[0];
-      if (bank !== fineract) await c.query(`INSERT INTO reconciliation_break (run_id, kind, difference_cents) VALUES ($1,'bank_vs_fineract',$2)`, [run.id, bank - fineract]);
-      if (fineract !== platform) await c.query(`INSERT INTO reconciliation_break (run_id, kind, difference_cents) VALUES ($1,'fineract_vs_platform',$2)`, [run.id, fineract - platform]);
-      await this.audit.record(c, SYSTEM, 'reconciliation.run', 'reconciliation_run', run.id, null, { bank, fineract, platform, status: run.status });
-      if (!balanced) await this.notifier.toRole(c, 'ops', 'recon.break', { date });
-      const breaks = (await c.query(`SELECT id, kind, difference_cents, status, reference FROM reconciliation_break WHERE run_id = $1 ORDER BY created_at`, [run.id])).rows;
-      return { ...run, breaks };
-    });
-  }
-
-  async proposeBreakClose(u: AuthUser, id: string, note: string) {
-    return this.db.tx((c) => this.approvals.propose(c, u, { action: 'reconciliation_break_close', entityType: 'reconciliation_break', entityId: id, payload: { note }, requiredRole: 'ops', reason: note }));
-  }
-
-  reconRuns() {
-    return this.db.query(`SELECT r.*, (SELECT count(*) FROM reconciliation_break b WHERE b.run_id = r.id AND b.status = 'open')::int AS open_breaks FROM reconciliation_run r ORDER BY as_of_date DESC LIMIT 90`);
-  }
+  // reconciliation moved to reconciliation.ts (Phase 2 REC-01..06)
 
   // ------------------------------------------------------------------ funding (float top-up record)
   async recordFunding(u: AuthUser, b: { amountCents: bigint; source: string; reference: string; valueDate: string }) {
@@ -259,14 +178,6 @@ const Dispute = z.object({ invoiceId: zUuid, reasonCode: z.enum(['goods_not_rece
 @Controller()
 export class OpsController {
   constructor(private readonly s: OpsService) {}
-
-  @Post('ops/late-ladder/run') @Roles('ops')
-  ladder() { return this.s.runLateLadder(); }
-
-  @Post('advances/:id/recourse') @Roles('credit') @StepUp()
-  recourse(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() b: unknown) {
-    return this.s.recourse(u, zUuid.parse(id), z.object({ reason: zText() }).parse(b).reason);
-  }
 
   @Post('advances/:id/collection-actions') @Roles('ops', 'credit')
   note(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() b: unknown) {
@@ -320,17 +231,6 @@ export class OpsController {
   @Post('aml-flags/:id/review') @Roles('compliance') @StepUp()
   amlReview(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() b: unknown) {
     return this.s.reviewAml(u, zUuid.parse(id), z.object({ outcome: z.enum(['dismissed', 'str_filed']), goamlRef: z.string().max(64).optional(), note: zText(2000) }).parse(b));
-  }
-
-  @Post('reconciliation/run') @Roles('ops')
-  recon(@Query('date') date?: string) { return this.s.reconcile(date ? z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(date) : undefined); }
-
-  @Get('reconciliation/runs') @Roles('ops', 'ceo', 'compliance', 'auditor')
-  runs() { return this.s.reconRuns(); }
-
-  @Post('reconciliation/breaks/:id/close') @Roles('ops')
-  closeBreak(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() b: unknown) {
-    return this.s.proposeBreakClose(u, zUuid.parse(id), z.object({ note: zText(2000) }).parse(b).note);
   }
 
   @Post('funding') @Roles('ceo') @StepUp()

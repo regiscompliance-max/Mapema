@@ -18,5 +18,14 @@
   "shortfall.opened.supplier": "Your buyer paid {paid} against invoice {invoice} of {invoice_amount}. Mapema has been repaid; {amount} is still owed to you by the buyer. Please follow up with them directly - any further payment they make to the collection account will be passed to you.",
   "shortfall.opened.buyer": "Invoice {invoice}: you have paid {paid} of {invoice_amount}. {amount} is still owed to your supplier. Pay it to your usual collection account quoting {invoice}.",
   "shortfall.settled.supplier": "The buyer has now paid the remaining balance on invoice {invoice}. Nothing more is owed to you on it.",
-  "credit.review_due": "Credit review needed: {what} for {org} is due on {date} ({when}). Open Mapema > Credit > Review tasks."
+  "credit.review_due": "Credit review needed: {what} for {org} is due on {date} ({when}). Open Mapema > Credit > Review tasks.",
+  "reminder.pre_due": "Reminder: invoice {invoice} ({amount}) is due on {due}. Please pay the full amount into Mapema account {account}, reference {invoice}.",
+  "reminder.due": "Invoice {invoice} ({amount}) is due today, {due}. Please pay into Mapema account {account}, reference {invoice}.",
+  "reminder.overdue": "Invoice {invoice} ({amount}) was due on {due} and is {days} days overdue. Please pay into Mapema account {account}, reference {invoice}, or call us to agree a date.",
+  "reminder.supplier_warning": "Your buyer has not yet paid invoice {invoice} (due {due}, {days} days overdue). Under your agreement Mapema may ask you to repay the advance if it stays unpaid. We will contact you first.",
+  "recourse.demand": "Invoice {invoice} is unpaid {days} days after its due date. Under your master agreement please repay {amount} into Mapema account {account}, reference {invoice}. Call us if you want to agree a plan.",
+  "recourse.case_due": "Advance for invoice {invoice} is {days} days past due. A recourse decision is needed (maker-checker).",
+  "collections.npl": "Advance for invoice {invoice} is now non-performing ({days} days past due). The in duplum cap now applies.",
+  "recon.unexplained": "Reconciliation for {date}: {count} unexplained break(s). Review and resolve in the staff portal before releasing payouts.",
+  "accounting.push_failed": "Daily accounting journal for {date} was not pushed: {reason}."
 }
