@@ -43,7 +43,12 @@ export class ProblemFilter implements ExceptionFilter {
       const r = e.getResponse();
       detail = typeof r === 'string' ? r : (r as any)?.message?.toString?.() ?? e.message;
     } else if ((e as any)?.code === '23505') {
-      status = 409; code = 'CONFLICT'; detail = 'A record with these details already exists';
+      const constraint = String((e as any)?.constraint ?? '');
+      if (constraint.includes('etims_cu')) {
+        status = 409; code = 'DUPLICATE_ETIMS_CU'; detail = 'This eTIMS control-unit number is already on another invoice';
+      } else {
+        status = 409; code = 'CONFLICT'; detail = 'A record with these details already exists';
+      }
     } else if ((e as any)?.code === '23514' || (e as any)?.code === '23502') {
       status = 422; code = 'CONSTRAINT'; detail = 'The request breaks a data rule';
       this.log.warn(`constraint: ${(e as any)?.constraint ?? (e as any)?.message}`);

@@ -84,16 +84,37 @@ export class InvoicesService implements OnModuleInit {
       await this.audit.record(c, u.actor, 'invoice.duplicate_blocked', 'invoice', dup.id, null, { invoiceNumber: inv.invoiceNumber, supplierKraPin: inv.supplierKraPin });
       throw conflict('DUPLICATE_INVOICE', 'This invoice number has already been submitted for this supplier', { existingInvoiceId: dup.id });
     }
+    const cu = inv.etimsCuInvoiceNo?.trim() ? inv.etimsCuInvoiceNo.trim() : null;
     const et = await this.adapters.etims.validateInvoice({ requestId: u.actor.requestId ?? 'inv' }, {
-      supplierPin: inv.supplierKraPin, buyerPin: buyer.kra_pin, invoiceNumber: inv.invoiceNumber, cuInvoiceNo: inv.etimsCuInvoiceNo, amountCents: inv.amountCents, issueDate: inv.issueDate,
+      supplierPin: inv.supplierKraPin, buyerPin: buyer.kra_pin, invoiceNumber: inv.invoiceNumber, cuInvoiceNo: cu ?? undefined, amountCents: inv.amountCents, issueDate: inv.issueDate,
     });
-    const r = (await c.query(
-      `INSERT INTO invoice (supplier_id, buyer_id, supplier_kra_pin, invoice_number, invoice_number_norm, etims_cu_invoice_no, issue_date, due_date, amount_cents, currency, po_reference,
-         etims_status, etims_checked_at, etims_response, duplicate_hash, status, uploaded_by, source)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'KES',$10,$11, now(), $12, $13, 'awaiting_confirmation', $14, $15) RETURNING *`,
-      [sup.id, buyerId, inv.supplierKraPin, inv.invoiceNumber, norm, inv.etimsCuInvoiceNo ?? null, inv.issueDate, inv.dueDate, inv.amountCents, inv.poReference ?? null,
-        et.status, JSON.stringify(et), dupHash, u.id, source])).rows[0];
-    await this.audit.record(c, u.actor, 'invoice.create', 'invoice', r.id, null, { invoiceNumber: inv.invoiceNumber, amountCents: inv.amountCents, dueDate: inv.dueDate, etims: et.status, source });
+    let r;
+    try {
+      r = (await c.query(
+        `INSERT INTO invoice (supplier_id, buyer_id, supplier_kra_pin, invoice_number, invoice_number_norm, etims_cu_invoice_no, issue_date, due_date, amount_cents, currency, po_reference,
+           etims_status, etims_checked_at, etims_response, duplicate_hash, status, uploaded_by, source)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'KES',$10,$11, now(), $12, $13, 'awaiting_confirmation', $14, $15) RETURNING *`,
+        [sup.id, buyerId, inv.supplierKraPin, inv.invoiceNumber, norm, cu, inv.issueDate, inv.dueDate, inv.amountCents, inv.poReference ?? null,
+          et.status, JSON.stringify(et), dupHash, u.id, source])).rows[0];
+    } catch (e: any) {
+      if (e?.code === '23505' && String(e.constraint ?? '').includes('etims_cu')) {
+        throw conflict('DUPLICATE_ETIMS_CU', 'This eTIMS control-unit number is already on another invoice');
+      }
+      throw e;
+    }
+    const similar = (await c.query(
+      `SELECT id, invoice_number FROM invoice WHERE supplier_kra_pin = $1 AND amount_cents = $2 AND issue_date = $3 AND invoice_number_norm <> $4 AND id <> $5 AND status NOT IN ('cancelled','rejected')`,
+      [inv.supplierKraPin, inv.amountCents, inv.issueDate, norm, r.id])).rows;
+    if (similar.length) {
+      await c.query(`UPDATE invoice SET similar_review = true, similar_invoice_ids = $2 WHERE id = $1`, [r.id, similar.map((s: any) => s.id)]);
+      r.similar_review = true;
+      r.similar_invoice_ids = similar.map((s: any) => s.id);
+      await this.audit.record(c, u.actor, 'invoice.similar_flagged', 'invoice', r.id, null, { similarInvoiceIds: r.similar_invoice_ids, similarNumbers: similar.map((s: any) => s.invoice_number) });
+    }
+    await this.audit.record(c, u.actor, 'invoice.create', 'invoice', r.id, null, { invoiceNumber: inv.invoiceNumber, amountCents: inv.amountCents, dueDate: inv.dueDate, etims: et.status, source, similarReview: Boolean(similar.length) });
+    const params = { invoice: inv.invoiceNumber, amount: formatKes(inv.amountCents), date: inv.issueDate, submitter: u.displayName, cu: cu ?? 'none' };
+    await this.notifier.toOrg(c, buyerId, 'invoice.submitted', params, { type: 'invoice', id: r.id });
+    await this.notifier.toOrg(c, sup.id, 'invoice.submitted', params, { type: 'invoice', id: r.id });
     return r;
   }
 
@@ -130,7 +151,7 @@ export class InvoicesService implements OnModuleInit {
     return { created: results.filter((r) => r.status === 'created').length, failed: results.filter((r) => r.status === 'error').length, results };
   }
 
-  async decide(u: AuthUser, invoiceId: string, decision: 'approve' | 'reject' | 'hold' | 'release_hold', reasonCode?: string, reasonText?: string) {
+  async decide(u: AuthUser, invoiceId: string, decision: 'approve' | 'reject' | 'hold' | 'release_hold', reasonCode?: string, reasonText?: string, att?: { goodsReceived?: boolean; goodsReceivedNote?: string; poReference?: string }) {
     return this.db.tx(async (c) => {
       const inv = (await c.query(`SELECT * FROM invoice WHERE id = $1 FOR UPDATE`, [invoiceId])).rows[0];
       if (!inv) throw notFound('Invoice');
@@ -139,11 +160,20 @@ export class InvoicesService implements OnModuleInit {
       const allowed: Record<string, string[]> = { approve: ['awaiting_confirmation', 'on_hold'], reject: ['awaiting_confirmation', 'on_hold'], hold: ['awaiting_confirmation'], release_hold: ['on_hold'] };
       if (!allowed[decision].includes(inv.status)) throw conflict('BAD_STATE', `Invoice is ${inv.status}`);
       if (decision === 'approve' && inv.etims_status === 'invalid') throw unprocessable('ETIMS_INVALID', 'eTIMS says this invoice is not valid; it cannot be confirmed');
+      if (decision === 'approve') {
+        if (typeof att?.goodsReceived !== 'boolean') throw unprocessable('ATTESTATION_REQUIRED', 'Confirm whether the goods or services have been received');
+        if (!att.goodsReceived && !(att.goodsReceivedNote && att.goodsReceivedNote.trim().length >= 3)) {
+          throw unprocessable('GOODS_RECEIVED_NOTE_REQUIRED', 'If confirming without receipt, give a short reason (for example a contractual milestone)');
+        }
+      }
       const next = { approve: 'confirmed', reject: 'rejected', hold: 'on_hold', release_hold: 'awaiting_confirmation' }[decision];
-      await c.query(`INSERT INTO invoice_decision (invoice_id, decision, reason_code, reason_text, decided_by) VALUES ($1,$2,$3,$4,$5)`, [invoiceId, decision, reasonCode ?? null, reasonText ?? null, u.id]);
-      await c.query(`UPDATE invoice SET status = $2, updated_at = now() WHERE id = $1`, [invoiceId, next]);
-      await this.audit.record(c, u.actor, `invoice.${decision}`, 'invoice', invoiceId, { status: inv.status }, { status: next, reasonCode });
-      return { id: invoiceId, status: next };
+      const po = att?.poReference?.trim() || null;
+      await c.query(`INSERT INTO invoice_decision (invoice_id, decision, reason_code, reason_text, decided_by, goods_received, goods_received_note, po_reference) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [invoiceId, decision, reasonCode ?? null, reasonText ?? null, u.id, decision === 'approve' ? att!.goodsReceived : null, att?.goodsReceivedNote ?? null, po]);
+      await c.query(`UPDATE invoice SET status = $2, goods_received = COALESCE($3, goods_received), goods_received_note = COALESCE($4, goods_received_note), po_reference = COALESCE($5, po_reference), updated_at = now() WHERE id = $1`,
+        [invoiceId, next, decision === 'approve' ? att!.goodsReceived : null, decision === 'approve' ? (att?.goodsReceivedNote ?? null) : null, po]);
+      await this.audit.record(c, u.actor, `invoice.${decision}`, 'invoice', invoiceId, { status: inv.status }, { status: next, reasonCode, goodsReceived: att?.goodsReceived, poReference: po });
+      return { id: invoiceId, status: next, goodsReceived: decision === 'approve' ? att!.goodsReceived : undefined };
     });
   }
 
@@ -191,6 +221,7 @@ export class InvoicesService implements OnModuleInit {
     if (f.supplierId) { params.push(f.supplierId); where.push(`i.supplier_id = $${params.length}`); }
     return this.db.query(
       `SELECT i.id, i.invoice_number, i.amount_cents, i.currency, i.issue_date, i.due_date, i.status, i.etims_status, i.source, i.created_at,
+              i.similar_review, i.goods_received, i.etims_cu_invoice_no, i.po_reference,
               b.legal_name AS buyer_name, s.legal_name AS supplier_name, i.buyer_id, i.supplier_id
        FROM invoice i JOIN organisation b ON b.id = i.buyer_id JOIN organisation s ON s.id = i.supplier_id
        ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY i.due_date, i.created_at LIMIT 500`, params);
@@ -200,8 +231,12 @@ export class InvoicesService implements OnModuleInit {
     const i = await this.db.one(`SELECT * FROM invoice WHERE id = $1`, [id]);
     if (!i) throw notFound('Invoice');
     if (!isStaff(u) && !hasRole(u, 'auditor', 'lender') && !u.roles.some((r) => r.orgId === i.buyer_id || r.orgId === i.supplier_id)) throw notFound('Invoice');
-    const decisions = await this.db.query(`SELECT decision, reason_code, reason_text, decided_at FROM invoice_decision WHERE invoice_id = $1 ORDER BY decided_at`, [id]);
-    return { ...i, decisions };
+    const decisions = await this.db.query(`SELECT decision, reason_code, reason_text, goods_received, goods_received_note, po_reference, decided_at FROM invoice_decision WHERE invoice_id = $1 ORDER BY decided_at`, [id]);
+    const registrySearch = await this.db.one(`SELECT s.*, d.file_name, d.file_sha256 FROM registry_search s JOIN document d ON d.id = s.evidence_document_id WHERE s.invoice_id = $1 ORDER BY (s.status = 'approved') DESC, s.created_at DESC LIMIT 1`, [id]);
+    const similar = i.similar_invoice_ids?.length
+      ? await this.db.query(`SELECT id, invoice_number, status FROM invoice WHERE id = ANY($1)`, [i.similar_invoice_ids])
+      : [];
+    return { ...i, decisions, registrySearch, similarInvoices: similar, etimsBlocksFunding: !['valid', 'overridden'].includes(i.etims_status) };
   }
 
   /** BUY-10 payment calendar: amounts due to Mapema by date with payment instructions. */
@@ -256,9 +291,15 @@ export class InvoicesController {
   @Post('invoices/:id/decision')
   @Roles('buyer_checker', 'buyer_admin')
   decide(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() b: unknown) {
-    const body = z.object({ decision: z.enum(['approve', 'reject', 'hold', 'release_hold']), reasonCode: z.string().max(40).optional(), reasonText: z.string().max(500).optional() })
-      .refine((x) => x.decision !== 'reject' || x.reasonCode, 'A reason is required to reject').parse(b);
-    return this.s.decide(u, zUuid.parse(id), body.decision, body.reasonCode, body.reasonText);
+    const body = z.object({
+      decision: z.enum(['approve', 'reject', 'hold', 'release_hold']),
+      reasonCode: z.string().max(40).optional(),
+      reasonText: z.string().max(500).optional(),
+      goodsReceived: z.boolean().optional(),
+      goodsReceivedNote: z.string().max(500).optional(),
+      poReference: z.string().max(60).optional(),
+    }).refine((x) => x.decision !== 'reject' || x.reasonCode, 'A reason is required to reject').parse(b);
+    return this.s.decide(u, zUuid.parse(id), body.decision, body.reasonCode, body.reasonText, { goodsReceived: body.goodsReceived, goodsReceivedNote: body.goodsReceivedNote, poReference: body.poReference });
   }
 
   @Post('confirmations')

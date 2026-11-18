@@ -748,6 +748,78 @@ paths:
           "$ref": "#/components/responses/Problem"
         "429":
           "$ref": "#/components/responses/Problem"
+  "/v1/advances/{id}/registry-filing":
+    post:
+      tags:
+        - "registry"
+      operationId: "registry_filing"
+      summary: "POST advances/{id}/registry-filing"
+      description: "Roles: credit, ops, ceo (MFA required for all users). Requires a fresh step-up sign-in (STEP_UP_MAX_AGE_SEC). Exact validation rules live in the zod schema in the controller."
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+      responses:
+        "201":
+          description: "Success. Money values are KES integer cents serialised as decimal strings."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/AnyJson"
+        "400":
+          "$ref": "#/components/responses/Problem"
+        "401":
+          "$ref": "#/components/responses/Problem"
+        "403":
+          "$ref": "#/components/responses/Problem"
+        "429":
+          "$ref": "#/components/responses/Problem"
+  "/v1/advances/{id}/registry-filings":
+    get:
+      tags:
+        - "registry"
+      operationId: "registry_listFilings"
+      summary: "GET advances/{id}/registry-filings"
+      description: "Roles: credit, ops, ceo, admin, compliance, auditor (MFA required for all users). Exact validation rules live in the zod schema in the controller."
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+        - name: "kind"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+        - name: "status"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: "Success. Money values are KES integer cents serialised as decimal strings."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/AnyJson"
+        "400":
+          "$ref": "#/components/responses/Problem"
+        "401":
+          "$ref": "#/components/responses/Problem"
+        "403":
+          "$ref": "#/components/responses/Problem"
+        "429":
+          "$ref": "#/components/responses/Problem"
   "/v1/advances/{id}/release":
     post:
       tags:
@@ -3528,20 +3600,45 @@ paths:
           "application/json":
             schema:
               type: "object"
+      responses:
+        "201":
+          description: "Success. Money values are KES integer cents serialised as decimal strings."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/AnyJson"
+        "400":
+          "$ref": "#/components/responses/Problem"
+        "401":
+          "$ref": "#/components/responses/Problem"
+        "403":
+          "$ref": "#/components/responses/Problem"
+        "429":
+          "$ref": "#/components/responses/Problem"
+  "/v1/invoices/{id}/etims-override":
+    post:
+      tags:
+        - "registry"
+      operationId: "registry_override"
+      summary: "POST invoices/{id}/etims-override"
+      description: "Roles: credit, ceo (MFA required for all users). Requires a fresh step-up sign-in (STEP_UP_MAX_AGE_SEC). Exact validation rules live in the zod schema in the controller."
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
               properties:
-                decision:
-                  type: "string"
-                  enum:
-                    - "approve"
-                    - "reject"
-                    - "hold"
-                    - "release_hold"
-                reasonCode:
-                  type: "string"
-                reasonText:
+                reason:
                   type: "string"
               required:
-                - "decision"
+                - "reason"
       responses:
         "201":
           description: "Success. Money values are KES integer cents serialised as decimal strings."
@@ -3602,6 +3699,74 @@ paths:
           "$ref": "#/components/responses/Problem"
         "429":
           "$ref": "#/components/responses/Problem"
+  "/v1/invoices/{id}/registry-search":
+    post:
+      tags:
+        - "registry"
+      operationId: "registry_search"
+      summary: "POST invoices/{id}/registry-search"
+      description: "Roles: credit, ops, ceo (MFA required for all users). Requires a fresh step-up sign-in (STEP_UP_MAX_AGE_SEC). Exact validation rules live in the zod schema in the controller."
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+      responses:
+        "201":
+          description: "Success. Money values are KES integer cents serialised as decimal strings."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/AnyJson"
+        "400":
+          "$ref": "#/components/responses/Problem"
+        "401":
+          "$ref": "#/components/responses/Problem"
+        "403":
+          "$ref": "#/components/responses/Problem"
+        "429":
+          "$ref": "#/components/responses/Problem"
+  "/v1/invoices/{id}/registry-searches":
+    get:
+      tags:
+        - "registry"
+      operationId: "registry_listSearches"
+      summary: "GET invoices/{id}/registry-searches"
+      description: "Roles: credit, ops, ceo, admin, compliance, auditor (MFA required for all users). Exact validation rules live in the zod schema in the controller."
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+      responses:
+        "200":
+          description: "Success. Money values are KES integer cents serialised as decimal strings."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/AnyJson"
+        "400":
+          "$ref": "#/components/responses/Problem"
+        "401":
+          "$ref": "#/components/responses/Problem"
+        "403":
+          "$ref": "#/components/responses/Problem"
+        "429":
+          "$ref": "#/components/responses/Problem"
   "/v1/invoices/bulk-decision":
     post:
       tags:
@@ -3628,6 +3793,12 @@ paths:
                 reasonCode:
                   type: "string"
                 reasonText:
+                  type: "string"
+                goodsReceived:
+                  type: "boolean"
+                goodsReceivedNote:
+                  type: "string"
+                poReference:
                   type: "string"
               required:
                 - "invoiceIds"
@@ -3995,6 +4166,39 @@ paths:
           "$ref": "#/components/responses/Problem"
         "429":
           "$ref": "#/components/responses/Problem"
+  "/v1/ops/tasks":
+    get:
+      tags:
+        - "registry"
+      operationId: "registry_tasks"
+      summary: "GET ops/tasks"
+      description: "Roles: ops, credit, ceo, admin, compliance (MFA required for all users). Exact validation rules live in the zod schema in the controller."
+      parameters:
+        - name: "kind"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+        - name: "status"
+          in: "query"
+          required: false
+          schema:
+            type: "string"
+      responses:
+        "200":
+          description: "Success. Money values are KES integer cents serialised as decimal strings."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/AnyJson"
+        "400":
+          "$ref": "#/components/responses/Problem"
+        "401":
+          "$ref": "#/components/responses/Problem"
+        "403":
+          "$ref": "#/components/responses/Problem"
+        "429":
+          "$ref": "#/components/responses/Problem"
   "/v1/organisations":
     post:
       tags:
@@ -4204,26 +4408,12 @@ paths:
             schema:
               type: "object"
               properties:
-                limitCents:
-                  type: "string"
-                  pattern: "^[0-9]+$"
-                  description: "KES integer cents as a decimal string"
-                advanceRateBps:
-                  type: "integer"
-                startDate:
-                  type: "string"
-                  format: "date"
-                reviewDate:
-                  type: "string"
-                  format: "date"
-                decisionReason:
+                dependent:
+                  type: "boolean"
+                note:
                   type: "string"
               required:
-                - "limitCents"
-                - "advanceRateBps"
-                - "startDate"
-                - "reviewDate"
-                - "decisionReason"
+                - "dependent"
       responses:
         "201":
           description: "Success. Money values are KES integer cents serialised as decimal strings."
@@ -4328,6 +4518,47 @@ paths:
                 - "fileName"
                 - "mimeType"
                 - "contentBase64"
+      responses:
+        "201":
+          description: "Success. Money values are KES integer cents serialised as decimal strings."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/AnyJson"
+        "400":
+          "$ref": "#/components/responses/Problem"
+        "401":
+          "$ref": "#/components/responses/Problem"
+        "403":
+          "$ref": "#/components/responses/Problem"
+        "429":
+          "$ref": "#/components/responses/Problem"
+  "/v1/organisations/{id}/government-payer":
+    post:
+      tags:
+        - "Onboarding"
+      operationId: "onboarding_governmentPayer"
+      summary: "POST organisations/{id}/government-payer"
+      description: "Roles: credit, ceo (MFA required for all users). Exact validation rules live in the zod schema in the controller."
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                dependent:
+                  type: "boolean"
+                note:
+                  type: "string"
+              required:
+                - "dependent"
       responses:
         "201":
           description: "Success. Money values are KES integer cents serialised as decimal strings."
@@ -4521,12 +4752,17 @@ paths:
                   format: "date"
                 decisionReason:
                   type: "string"
+                governmentPayerDependent:
+                  type: "boolean"
+                governmentPayerNote:
+                  type: "string"
               required:
                 - "limitCents"
                 - "advanceRateBps"
                 - "startDate"
                 - "reviewDate"
                 - "decisionReason"
+                - "governmentPayerDependent"
       responses:
         "201":
           description: "Success. Money values are KES integer cents serialised as decimal strings."

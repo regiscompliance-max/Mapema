@@ -18,7 +18,7 @@ import { assertOrgAccess, AuthUser, BUYER_ROLES, CurrentUser, hasRole, isStaff, 
 import { DocumentsService } from './documents';
 
 const DOC_TYPES = ['programme_agreement', 'master_agreement', 'deed_of_assignment', 'ilu', 'notice_of_assignment', 'receipt', 'credit_report',
-  'certificate_of_incorporation', 'cr12', 'kra_pin_certificate', 'board_resolution', 'national_id', 'passport', 'selfie', 'bank_proof', 'audited_accounts', 'invoice_pdf', 'other'] as const;
+  'certificate_of_incorporation', 'cr12', 'kra_pin_certificate', 'board_resolution', 'national_id', 'passport', 'selfie', 'bank_proof', 'audited_accounts', 'invoice_pdf', 'registry_search_certificate', 'registry_filing_evidence', 'other'] as const;
 /** Customer-visible document types; internal ones (credit reports, CBK letters) are staff/auditor only. */
 const CUSTOMER_HIDDEN = new Set(['credit_report', 'cbk_approval_letter']);
 

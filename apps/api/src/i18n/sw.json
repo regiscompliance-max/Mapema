@@ -33,5 +33,7 @@
   "mpesa.name_mismatch": "Malipo ya M-Pesa ya ankara {invoice} yalienda kwa laini iliyosajiliwa kwa jina tofauti. Alama ya ukaguzi wa AML imewekwa.",
   "erp.paused": "Muunganisho wa ERP {name} umesitishwa baada ya kushindwa kuingia mara kadhaa. Mwombe mnunuzi abadilishe ufunguo wa API, kisha uuendeleze.",
   "erp.record_changed": "Ankara {invoice} ilibadilishwa katika {name} baada ya Mapema kuiingiza. Nakala iliyoingizwa haikubadilishwa: ikague pamoja na mnunuzi.",
-  "payout_batch.pending": "Kundi la malipo la vipengee {count} lenye jumla ya {amount} linasubiri idhini ya pili ya shughuli."
+  "payout_batch.pending": "Kundi la malipo la vipengee {count} lenye jumla ya {amount} linasubiri idhini ya pili ya shughuli.",
+  "invoice.submitted": "Ankara {invoice} ya {amount} ya tarehe {date} imewasilishwa na {submitter} (namba ya eTIMS CU: {cu}). Tafadhali ikague.",
+  "registry.filing_due": "Malipo ya awali {advance} kwa ankara {invoice} yamelipwa. Weka taarifa ya uhamisho kwenye sajili ya MPSRA na pakia ushahidi wa usajili."
 }

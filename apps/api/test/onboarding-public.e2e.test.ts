@@ -63,7 +63,7 @@ describe('onboarding failure modes', () => {
     const base = { supplierKraPin: w.supplierKraPin, amountCents: '10000000', currency: 'KES', issueDate: addDays(D0, -1), dueDate: addDays(D0, 30) };
     const bad = await w.buyerAdmin.post('/invoices', { ...base, invoiceNumber: 'BAD-001', etimsCuInvoiceNo: 'BAD001' });
     expect(bad.etims_status).toBe('invalid');
-    expect((await w.buyerChecker.post(`/invoices/${bad.id}/decision`, { decision: 'approve' }, 422)).title).toBe('ETIMS_INVALID');
+    expect((await w.buyerChecker.post(`/invoices/${bad.id}/decision`, { decision: 'approve', goodsReceived: true }, 422)).title).toBe('ETIMS_INVALID');
     const down = await w.buyerAdmin.post('/invoices', { ...base, invoiceNumber: 'DOWN-002', etimsCuInvoiceNo: 'DOWN002' });
     expect(down.etims_status).toBe('unavailable');
   });
@@ -100,7 +100,7 @@ describe('public site API', () => {
   });
   it('health reports every provider adapter and its mode', async () => {
     const r = await h.http.get('/v1/public/health').expect(200);
-    expect(r.body.providers.map((p: any) => p.name).sort()).toEqual(['accounting', 'bank', 'crb', 'crm', 'email', 'erp', 'esign', 'etims', 'kyc', 'leads', 'ledger', 'mpesa', 'sms']);
+    expect(r.body.providers.map((p: any) => p.name).sort()).toEqual(['accounting', 'bank', 'crb', 'crm', 'email', 'erp', 'esign', 'etims', 'kyc', 'leads', 'ledger', 'mpesa', 'registry', 'sms']);
     expect(r.body.providers.every((p: any) => p.mode === 'mock')).toBe(true);
   });
 });

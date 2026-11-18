@@ -42,10 +42,11 @@ import { FundingController, FundingService } from './modules/funding';
 import { MpesaController, MpesaService } from './modules/mpesa';
 import { ErpController, ErpService } from './modules/erp';
 import { BulkController, BulkService } from './modules/bulk';
+import { RegistryController, RegistryService } from './modules/registry';
 
 export const CONTROLLERS = [AuthSessionController, OidcBffController, PublicController, OnboardingController, InvoicesController, AdvancesController, PaymentsController, CreditReviewController, SelfServiceController, OpsController, ApprovalsController, AdminController, ReportsController,
   CollectionsController, ReconciliationController, HolidaysController, RegulatoryController, DashboardsController, IntegrationsController,
-  FundingController, MpesaController, ErpController, BulkController];
+  FundingController, MpesaController, ErpController, BulkController, RegistryController];
 
 export interface AppOverrides { adapters?: Adapters; storage?: StorageAdapter }
 
@@ -64,13 +65,13 @@ export class AppModule implements NestModule {
         Db, Clock, Audit, FieldCrypto, ArtifactCrypto, Outbox, Notifier, Idempotency, DevIdp, TokenVerifier, Identity, Sessions, OidcBff,
         ApprovalsService, SettingsService, DocumentsService, OnboardingService, InvoicesService, AdvancesService, PaymentsService, OpsService, ReportsService, PublicService, CreditReviewService, SelfService,
         CollectionsService, ReconciliationService, HolidaysService, RegulatoryService, DashboardsService, IntegrationsService,
-        FundingService, MpesaService, ErpService, BulkService,
+        FundingService, MpesaService, ErpService, BulkService, RegistryService,
         ...(cfg.RATE_LIMIT_STORE === 'postgres' ? [{ provide: ThrottlerStorage, useClass: PgThrottlerStorage }] : []),
         { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_FILTER, useClass: ProblemFilter },
       ],
-      exports: [Db, Clock, Outbox, HolidaysService, PaymentsService, OpsService, AdvancesService, CreditReviewService, CollectionsService, ReconciliationService, RegulatoryService, IntegrationsService, FundingService, MpesaService, ErpService, ADAPTERS],
+      exports: [Db, Clock, Outbox, HolidaysService, PaymentsService, OpsService, AdvancesService, CreditReviewService, CollectionsService, ReconciliationService, RegulatoryService, IntegrationsService, FundingService, MpesaService, ErpService, RegistryService, ADAPTERS],
     };
   }
 

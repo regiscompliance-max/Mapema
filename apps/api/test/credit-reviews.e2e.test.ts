@@ -12,7 +12,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { addDays } from '@mapema/pricing';
 import { Harness, startHarness } from './harness';
-import { AT, buildWorld, eligibleInvoice, seedFunding, World, WORKED } from './world';
+import { AT, buildWorld, eligibleInvoice, recordRegistrySearch, seedFunding, World, WORKED } from './world';
 
 let h: Harness; let w: World;
 const D0 = WORKED.quoteDate;
@@ -76,6 +76,7 @@ describe('CRD-07 review-date reminders', () => {
     const inv = await eligibleInvoice(h, w, { number: 'INV-RV-01', amountCents: 10_000_000n, issueDate: addDays(R, -1), dueDate: addDays(R, 40) });
     const q = await w.supplier.post(`/invoices/${inv}/quote`);
     const acc = await w.supplier.post('/advances', { disclosureIds: [q.disclosureId], acceptTerms: true }, undefined, { 'Idempotency-Key': 'review-test-01' });
+    await recordRegistrySearch(w, inv);
     const r = await w.credit.post(`/advances/${acc.advances[0].advanceId}/decision`, { decision: 'approve', reason: 'x' }, 422);
     expect(r.failedChecks.map((c: any) => c.code)).toContain('PROGRAMME_IN_REVIEW_DATE');
     expect(r.failedChecks.map((c: any) => c.code)).not.toContain('KYC_CURRENT');
@@ -93,6 +94,7 @@ describe('CRD-07 review-date reminders', () => {
     const inv = await eligibleInvoice(h, w, { number: 'INV-RV-02', amountCents: 10_000_000n, issueDate: kx, dueDate: addDays(kx, 40) });
     const q = await w.supplier.post(`/invoices/${inv}/quote`);
     const acc = await w.supplier.post('/advances', { disclosureIds: [q.disclosureId], acceptTerms: true }, undefined, { 'Idempotency-Key': 'review-test-02' });
+    await recordRegistrySearch(w, inv);
     const r = await w.credit.post(`/advances/${acc.advances[0].advanceId}/decision`, { decision: 'approve', reason: 'x' }, 422);
     expect(r.failedChecks.map((c: any) => c.code)).toEqual(['KYC_CURRENT']);
   });

@@ -5,6 +5,8 @@
  *  D-66 Kenyan public holidays: computed Schedule + gazetted days under maker-checker
  * (S-15 batch step-up window lives in phase3.e2e; D-32 BFF login in oidc-bff.e2e.)
  */
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ADMIN_URL, Harness, startHarness } from './harness';
 import { AT, buildWorld, World, WORKED } from './world';
@@ -149,7 +151,8 @@ describe('go-live hardening', () => {
     const tampered = (await h.admin.query(`SELECT a.id FROM mapema.report_artifact a JOIN mapema.report_artifact b ON a.content = b.content AND a.id <> b.id WHERE a.format = 'pdf'`)).rows.map((r) => r.id);
     expect(tampered).toHaveLength(1);
     const r1 = await restoreCheck(u.toString(), { key: h.env.STORAGE_ENCRYPTION_KEY, sample: 1000 });
-    expect(r1.checks.migrations).toEqual({ ok: true, applied: 10 });
+    const applied = readdirSync(join(__dirname, '../../../db/migrations')).filter((f) => f.endsWith('.sql')).length;
+    expect(r1.checks.migrations).toEqual({ ok: true, applied });
     expect(r1.checks.audit_chain.ok).toBe(true);
     expect(r1.checks.audit_chain.checked).toBeGreaterThan(10);
     expect(r1.checks.artefacts).toEqual({ ok: false, detail: { badId: tampered[0] } });

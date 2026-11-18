@@ -276,7 +276,19 @@ export function BulkConfirm() {
   const [res, setRes] = useState<any>(null);
   const { busy, msg, run } = useAction();
   const go = (decision: 'approve' | 'reject') => run(async () => {
-    const r = await api('/invoices/bulk-decision', { body: { invoiceIds: sel, decision, ...(decision === 'reject' ? { reasonCode: 'NOT_RECEIVED', reasonText: prompt(t('p3.reason')) ?? '' } : {}) } });
+    let extra: Record<string, unknown>;
+    if (decision === 'reject') extra = { reasonCode: 'NOT_RECEIVED', reasonText: prompt(t('p3.reason')) ?? '' };
+    else {
+      const received = window.confirm(t('p4.att.confirm'));
+      let goodsReceivedNote: string | undefined;
+      if (!received) {
+        goodsReceivedNote = prompt(t('p4.att.note')) ?? '';
+        if (!goodsReceivedNote.trim()) return;
+      }
+      const po = prompt(t('p4.att.po')) || undefined;
+      extra = { goodsReceived: received, goodsReceivedNote, poReference: po };
+    }
+    const r = await api('/invoices/bulk-decision', { body: { invoiceIds: sel, decision, ...extra } });
     setRes(r); setSel([]);
   }, t('p3.done')).then(reload);
   return (

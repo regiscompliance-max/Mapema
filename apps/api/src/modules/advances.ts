@@ -29,6 +29,7 @@ import { SettingsService } from './admin';
 import { DocumentsService, simplePdf } from './documents';
 import { FundingService } from './funding';
 import { TERMS_VERSION } from './onboarding';
+import { approvedRegistrySearch } from './registry';
 
 export const KID_VERSION = 'KID-2026-11-v1';
 const LIVE_STATUSES = `('approved','released','funded','late','recourse','non_performing')`;
@@ -154,7 +155,20 @@ export class AdvancesService implements OnModuleInit {
     const checks: Check[] = [];
     const lending = await this.settings.lending(q);
     checks.push({ code: 'LENDING_ENABLED', ok: lending.enabled, detail: lending.enabled ? `CBK licence ${lending.cbk_licence_no}` : 'Lending is switched off' });
-    checks.push({ code: 'ETIMS_VALID', ok: ['valid', 'overridden'].includes(adv.etims_status), detail: adv.etims_status });
+    const etimsOk = ['valid', 'overridden'].includes(adv.etims_status);
+    const etimsDetail = adv.etims_status === 'unavailable'
+      ? 'eTIMS is unavailable; this invoice cannot be funded until a credit officer records an override (maker-checker)'
+      : adv.etims_status === 'invalid'
+        ? 'eTIMS says this invoice is not valid; it cannot be funded'
+        : String(adv.etims_status);
+    checks.push({ code: 'ETIMS_VALID', ok: etimsOk, detail: etimsDetail });
+    const search = await approvedRegistrySearch(q, adv.invoice_id);
+    const searchOk = Boolean(search && (search.result === 'clear' || search.result === 'conflict_waived'));
+    const searchDetail = !search ? 'no approved registry search on file — funding is blocked'
+      : search.result === 'conflict' ? 'registry search found a conflict that has not been waived'
+      : search.result === 'conflict_waived' ? `conflict waived: ${search.notes ?? 'see approval'}`
+      : 'clear';
+    checks.push({ code: 'REGISTRY_SEARCH', ok: searchOk, detail: searchDetail });
     checks.push({ code: 'ILU_SIGNED', ok: Boolean(adv.ilu_signed_at), detail: adv.ilu_signed_at ? String(adv.ilu_signed_at) : 'not signed' });
     const fuzzy = (await q.query(
       `SELECT count(*)::int AS n FROM invoice i JOIN advance a2 ON a2.invoice_id = i.id AND a2.status NOT IN ('declined','cancelled','release_failed')
@@ -224,7 +238,8 @@ export class AdvancesService implements OnModuleInit {
   async queue(status: string) {
     const rows = await this.db.query(
       `SELECT a.id, a.status, a.principal_cents, a.discount_fee_cents, a.verification_fee_cents, a.due_date, a.created_at, a.approved_by, a.fineract_loan_id,
-              i.invoice_number, i.amount_cents AS invoice_amount_cents, b.legal_name AS buyer_name, s.legal_name AS supplier_name
+              a.invoice_id, a.registry_registration_no, i.invoice_number, i.amount_cents AS invoice_amount_cents, i.etims_status, i.similar_review,
+              b.legal_name AS buyer_name, s.legal_name AS supplier_name
        FROM advance a JOIN invoice i ON i.id = a.invoice_id JOIN organisation b ON b.id = a.buyer_id JOIN organisation s ON s.id = a.supplier_id
        WHERE a.status = $1 ORDER BY a.created_at`, [status]);
     const out = [];
@@ -408,6 +423,9 @@ export class AdvancesService implements OnModuleInit {
       await this.audit.record(c, SYSTEM, 'advance.funded', 'advance', advanceId, { status: 'released' }, { status: 'funded', fineractLoanId: loanId, bankRef: bank.bankRef, noticeDocId: doc.id });
       await this.notifier.toOrg(c, a.supplier_id, 'advance.funded', { amount: formatKes(toCents(payout.amount_cents)), invoice: a.invoice_number, last4: payout.account_number_last4, ref: bank.bankRef }, { type: 'advance', id: advanceId });
       await this.notifier.toOrg(c, a.buyer_id, 'notice.assignment', { invoice: a.invoice_number, amount: formatKes(toCents(a.invoice_amount_cents)), supplier: a.supplier_name, due: a.due_date, account: acct?.virtual_account_no ?? '' }, { type: 'advance', id: advanceId });
+      await c.query(`INSERT INTO ops_task (kind, advance_id, status, due_date, note) VALUES ('registry_filing_due', $1, 'open', $2, 'File the notice of assignment at the MPSRA Office of the Registrar of Security Rights and upload the registration evidence')
+        ON CONFLICT (kind, advance_id) DO NOTHING`, [advanceId, today]);
+      await this.notifier.toRole(c, 'ops', 'registry.filing_due', { invoice: a.invoice_number, advance: advanceId }, { type: 'advance', id: advanceId });
     });
   }
 
@@ -435,7 +453,10 @@ export class AdvancesService implements OnModuleInit {
     const payouts = await this.db.query(`SELECT id, type, amount_cents, status, bank_ref, released_at, confirmed_at, failure_reason FROM payout WHERE advance_id = $1 ORDER BY created_at`, [id]);
     const allocations = await this.db.query(`SELECT pa.*, p.received_at FROM payment_allocation pa JOIN payment p ON p.id = pa.payment_id WHERE pa.advance_id = $1 ORDER BY pa.created_at`, [id]);
     const disclosure = this.disclosureView(await this.db.one(`SELECT * FROM price_disclosure WHERE id = $1`, [a.price_disclosure_id]));
-    return { ...a, disclosure, payouts, allocations };
+    const registryFiling = await this.db.one(`SELECT f.*, d.file_name, d.file_sha256 FROM registry_filing f JOIN document d ON d.id = f.evidence_document_id WHERE f.advance_id = $1 ORDER BY (f.status = 'approved') DESC, f.created_at DESC LIMIT 1`, [id]);
+    const registrySearch = await this.db.one(`SELECT s.*, d.file_name, d.file_sha256 FROM registry_search s JOIN document d ON d.id = s.evidence_document_id WHERE s.invoice_id = $1 ORDER BY (s.status = 'approved') DESC, s.created_at DESC LIMIT 1`, [a.invoice_id]);
+    const filingTask = await this.db.one(`SELECT * FROM ops_task WHERE kind = 'registry_filing_due' AND advance_id = $1`, [id]);
+    return { ...a, disclosure, payouts, allocations, registryFiling, registrySearch, filingTask };
   }
 
   async listForUser(u: AuthUser) {

@@ -36,6 +36,7 @@ export async function Footer({ lang }: { lang: Lang }) {
         <ul className="flex flex-wrap gap-x-4 gap-y-2">
           <li><Link href="/complaints">{t('footer.complaints')}</Link></li>
           <li><Link href="/legal/privacy">{t('footer.privacy')}</Link></li>
+          <li><Link href="/legal/anti-fraud">{t('footer.antifraud')}</Link></li>
           <li><Link href="/legal/terms">{t('footer.terms')}</Link></li>
           <li><Link href="/data-protection">{t('footer.dp')}</Link></li>
           <li><Link href="/cbk-status">{t('footer.cbk')}</Link></li>

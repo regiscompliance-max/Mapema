@@ -98,3 +98,21 @@ CEO approved Phase 3 and its defaults Q-K to Q-R as recorded in docs/phase-3/REA
 | D-72 | Staging default: AWS af-south-1 (Cape Town) with synthetic data only, about USD 330/month (estimate). Production region decided after counsel (pack F1) and the CBK outsourcing notice. picomatch GHSA-fc5q-39xc-vjpf: no patched release exists (4.0.7 is the latest and affected); dev-only (vitest/vite), production audit clean; accepted until upstream fixes it. |
 
 **Questions for Deng (defaults apply if no answer):** see docs/go-live/README.md §"Questions for Deng".
+
+## Phase 4 security (CEO sign-off 18 Nov 2026, Europe/London)
+
+Deng approved the Phase 4 security proposal on 18 Nov 2026 (Europe/London) with **all defaults D-73 to D-80 and open questions Q-S to Q-Z**. Recorded here before the build. Sources: IFC 2022 Kenya SCF Market Assessment; FSD Kenya 2013 briefing note; FSD Kenya 2015 technical note; UNCTAD 2025 Unlocking Growth. Page-cited quotes live in `docs/phase-4-security/proposal.md`.
+
+| Id | Decision |
+| --- | --- |
+| D-73 | P4-1 (Q-S, Q-T): search the Movable Property Security Rights registry before funding; file the assignment after funding; store the registration number; fail closed if a search is missing. Evidence is a staff-uploaded certificate from the official portal, under maker-checker. The adapter is mock (tests) or a portal-only manual stub (sandbox/live). **No invented registry API.** |
+| D-74 | P4-2 (Q-U): notify the buyer and the supplier when an invoice is submitted; the eTIMS control-unit number must be unique when present; the same supplier PIN + amount + date with a different invoice number is flagged for review, not hard-blocked. The existing hard `NO_DUPLICATE` check on already-financed invoices with the same PIN + amount + date stays. |
+| D-75 | P4-3 (Q-V): draft a buyer security and data pack and a public anti-fraud notice. The notice may appear in the application as a clearly marked draft that is not deployed to the marketing site. The site and the application still say Mapema is **not yet licensed**. |
+| D-76 | P4-4 (Q-X, Q-Y, Q-Z): add counsel questions I1–I5 (MPSRA filing and priority versus the Insolvency Act; anti-assignment clauses; the small-claims path; whether a factoring Act was enacted since 2022). Default: proceed on MPSRA + assignment documents. **Do not change contracts until counsel answers.** |
+| D-77 | P4-5: a goods/services-received attestation is required at buyer confirmation. A purchase-order or GRN reference is optional. Confirming without receipt needs a short reason (for example a contractual milestone). |
+| D-78 | P4-6 (Q-U continued): eTIMS is the working original. An `unavailable` invoice cannot silently pass to funding. Confirmation may proceed; eligibility and funding require `valid` or a maker-checker `overridden` status. The existing `valid` \| `overridden` gate is kept and surfaced clearly. |
+| D-79 | P4-7 (Q-W credit insurance): credit insurance is considered after the first live programme. It is not a launch blocker. Documentation note only. |
+| D-80 | P4-8 (Q-W CRB, UNCTAD government delays): a government-payer dependency flag (and a mandatory comment when the flag is true or the sector is construction) sits on the buyer credit file before programme approval. No tighter sector cap. **No CRB file change** — the supplier remains the reported borrower (D-38, D-45) until counsel answers. |
+| D-81 | Phase 4 security (P4-1 to P4-8) is built on branch `phase-4-security` against the sign-off above. Worked example unchanged. Marketing-site Worker not deployed. |
+
+**Questions for Deng (defaults apply if no answer):** Q-S to Q-Z in `docs/phase-4-security/proposal.md`, all accepted as the defaults above.
