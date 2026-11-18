@@ -9,7 +9,7 @@
  *   recourse). C = KES 100,000 due Q+21 (short term: NPL at 30 DPD; in duplum cap).
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { addDays } from '@mapema/pricing';
+import { addDays, BusinessCalendar } from '@mapema/pricing';
 import { MockAccounting, MockCrm, MockSiteLeadSource } from '@mapema/adapters';
 import { addBusinessDays } from '../src/modules/recon-engine';
 import { Harness, startHarness } from './harness';
@@ -18,6 +18,8 @@ import { AT, buildWorld, eligibleInvoice, fund, LEDGER_ENV, REAL_LEDGER, seedFun
 let h: Harness; let w: World;
 const Q = WORKED.quoteDate;
 const DUE_W = WORKED.dueDate; const DUE_B = addDays(Q, 40); const DUE_C = addDays(Q, 21);
+/** the API's business calendar: Public Holidays Act Schedule + the migration-seeded gazetted day */
+const CAL = new BusinessCalendar([{ date: '2026-03-20', name: 'Idd-ul-Fitr', gazetteRef: 'GN 3955/2026' }]);
 const ids: Record<string, string> = {};
 const dayRun = async (date: string) => { h.clock.set(AT(date)); return w.ops.post('/collections/run'); };
 const status = async (id: string) => (await h.admin.query(`SELECT status FROM mapema.advance WHERE id = $1`, [id])).rows[0].status;
@@ -55,18 +57,29 @@ describe(`Phase 2 [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
     }
   });
 
+  // go-live D-66: reminders go out on business days only (weekends + Kenyan public holidays), pre-due steps move
+  // back and due/overdue steps forward. The mock run's dates are fixed; the real-ledger run's dates move with
+  // today, so the expectations are computed on the same calendar the API uses (Cap. 110 + the seeded gazette).
   it('TC-P2-COL-01 reminders before the due date, once per step, SMS + email via the adapters', async () => {
-    const r = await dayRun(addDays(DUE_B, -7));
+    const nominal = addDays(DUE_B, -7);
+    const preDay = CAL.onOrBefore(nominal);
+    if (preDay !== nominal) expect((await dayRun(nominal)).reminders).toEqual([]); // nothing on a weekend / holiday
+    const r = await dayRun(preDay);
     expect(r.reminders.filter((x: any) => x.advanceId === ids.B).map((x: any) => x.key)).toEqual(['pre_7']);
     expect(await orgNotes(w.buyerId, 'reminder.pre_due')).toBeGreaterThan(0);
-    const again = await dayRun(addDays(DUE_B, -7));
+    const again = await dayRun(preDay);
     expect(again.reminders).toEqual([]);
     await h.http.post('/v1/dev/jobs/run').expect(201);
     expect(h.adapters.email.outbox.some((m: any) => /INV-P2-B/.test(m.text) && /due on/.test(m.text))).toBe(true);
   });
 
   it('TC-P2-COL-02 a missed day catches up with the latest step only; status moves to late at 1 DPD', async () => {
-    const r = await dayRun(addDays(DUE_B, 1));
+    const d1 = addDays(DUE_B, 1);
+    const first = await dayRun(d1);
+    expect(await status(ids.B)).toBe('late'); // DPD stays calendar days from the contractual due date
+    const catchUp = CAL.onOrAfter(d1);
+    const r = catchUp === d1 ? first : await dayRun(catchUp);
+    if (catchUp !== d1) expect(first.reminders.filter((x: any) => x.advanceId === ids.B)).toEqual([]);
     expect(r.reminders.filter((x: any) => x.advanceId === ids.B).map((x: any) => x.key)).toEqual(['od_1']);
     expect(r.skipped.filter((x: any) => x.advanceId === ids.B).map((x: any) => x.key)).toEqual(['pre_1', 'due_0']);
     expect(await status(ids.B)).toBe('late');
@@ -100,7 +113,7 @@ describe(`Phase 2 [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
     const run = await w.ops.post(`/reconciliation/run?date=${DUE_W}`);
     const by = Object.fromEntries(run.breaks.map((b: any) => [b.item_key, b]));
     expect(by['bank:UNKNOWN-1']).toMatchObject({ classification: 'unexplained', category: 'unknown_bank_item', difference_cents: '700000' });
-    expect(by['bank:LATE-ARRIVAL-1']).toMatchObject({ classification: 'timing', category: 'credit_not_yet_ingested', expected_clear_by: addBusinessDays(DUE_W, 1) });
+    expect(by['bank:LATE-ARRIVAL-1']).toMatchObject({ classification: 'timing', category: 'credit_not_yet_ingested', expected_clear_by: addBusinessDays(DUE_W, 1, CAL) });
     expect(by['bank:CHG-1']).toMatchObject({ classification: 'explained', category: 'bank_charge', difference_cents: '-2500' });
     expect(by['residual:fineract_vs_platform']).toMatchObject({ classification: 'unexplained', difference_cents: '12345' });
     expect(run).toMatchObject({ status: 'breaks', unexplained_count: 2 });
@@ -126,12 +139,12 @@ describe(`Phase 2 [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
   });
 
   it('TC-P2-REC-06 the next day the un-ingested credit is no longer timing: it is unexplained', async () => {
-    const run = await w.ops.post(`/reconciliation/run?date=${addBusinessDays(DUE_W, 2)}`);
+    const run = await w.ops.post(`/reconciliation/run?date=${addBusinessDays(DUE_W, 2, CAL)}`);
     expect(run.breaks.find((b: any) => b.item_key === 'bank:LATE-ARRIVAL-1')).toMatchObject({ classification: 'unexplained', category: 'unknown_bank_item' });
     // ingest it (statement import) and rerun: gone
-    h.clock.set(AT(addBusinessDays(DUE_W, 2)));
+    h.clock.set(AT(addBusinessDays(DUE_W, 2, CAL)));
     await h.http.post('/v1/dev/bank/ingest-statement').send({ bankRef: 'LATE-ARRIVAL-1' }).expect(201);
-    const r2 = await w.ops.post(`/reconciliation/run?date=${addBusinessDays(DUE_W, 2)}`);
+    const r2 = await w.ops.post(`/reconciliation/run?date=${addBusinessDays(DUE_W, 2, CAL)}`);
     expect(r2.breaks.find((b: any) => b.item_key === 'bank:LATE-ARRIVAL-1')).toBeUndefined();
   });
 

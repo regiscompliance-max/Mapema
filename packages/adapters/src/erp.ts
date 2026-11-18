@@ -14,16 +14,18 @@
  * manual upload (duplicate hash, eTIMS, buyer confirmation + ILU).
  */
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync } from 'node:fs';
 import { createServer, Server } from 'node:http';
 import { join } from 'node:path';
 import { Cents } from '@mapema/pricing';
 import { AdapterContext, AdapterError, AdapterMode, HealthCheck } from './common';
+import { egressPolicyFromEnv, guardedFetch } from './egress';
+import { FileScanner, MockScanner } from './scan';
 
 export type ErpKind = 'odoo' | 'csv_sftp' | 'sap' | 'sage' | 'dynamics';
 export const ERP_KINDS: ErpKind[] = ['odoo', 'csv_sftp', 'sap', 'sage', 'dynamics'];
 export interface ErpRawRecord { externalId: string; version: string; data: Record<string, unknown> }
-export interface ErpFileResult { name: string; sha256: string; status: 'read' | 'duplicate_file' | 'bad_header' | 'too_many_rows' | 'too_large'; rows?: number }
+export interface ErpFileResult { name: string; sha256: string; status: 'read' | 'duplicate_file' | 'bad_header' | 'too_many_rows' | 'too_large' | 'unsafe_file' | 'infected' | 'scan_failed'; rows?: number; detail?: string }
 export interface ErpFetchResult { records: ErpRawRecord[]; nextCursor: string | null; files?: ErpFileResult[] }
 export interface ErpConnector {
   readonly kind: ErpKind;
@@ -42,7 +44,7 @@ async function httpJson(f: typeof fetch, url: string, init: RequestInit, timeout
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   let res: Response;
-  try { res = await f(url, { ...init, signal: ctrl.signal }); } catch (e) { throw err('ERP_UNAVAILABLE', `network: ${(e as Error).message}`); } finally { clearTimeout(t); }
+  try { res = await f(url, { ...init, signal: ctrl.signal }); } catch (e) { if (e instanceof AdapterError) throw e; throw err('ERP_UNAVAILABLE', `network: ${(e as Error).message}`); } finally { clearTimeout(t); }
   if (res.status === 401 || res.status === 403) throw err('ERP_AUTH_FAILED', `HTTP ${res.status}`, res.status);
   if (res.status === 429 || res.status >= 500) throw err('ERP_UNAVAILABLE', `HTTP ${res.status}`, res.status);
   if (!res.ok) throw err('ERP_BAD_RESPONSE', `HTTP ${res.status}`, res.status);
@@ -283,24 +285,39 @@ export function parseCsv(text: string): string[][] {
   row.push(cur); if (row.some((x) => x.trim() !== '')) rows.push(row);
   return rows;
 }
+/**
+ * CSV drop folder (S-16 hardening, go-live): the SFTP host writes into <drop>/<connectionId>/incoming.
+ * A file is only read when it is a REGULAR file (lstat: no symlinks, FIFOs or devices), its real path
+ * is inside incoming/, it is not world-writable, and the malware scanner says it is clean. Infected
+ * files go to quarantine/ (never processed); unsafe files to rejected/; a scanner outage leaves the
+ * file in incoming/ for the next run (fail closed).
+ */
 export class CsvDropConnector implements ErpConnector {
   readonly kind = 'csv_sftp' as const;
-  private pending: { name: string; sha: string; to: 'processed' | 'rejected' }[] = [];
-  constructor(readonly mode: AdapterMode, private readonly cfg: { dropDir: string }) {}
-  private dir(sub: 'incoming' | 'processed' | 'rejected') { return join(this.cfg.dropDir, sub); }
+  private pending: { name: string; sha: string; to: 'processed' | 'rejected' | 'quarantine' }[] = [];
+  constructor(readonly mode: AdapterMode, private readonly cfg: { dropDir: string }, private readonly scanner: FileScanner = new MockScanner()) {}
+  private dir(sub: 'incoming' | 'processed' | 'rejected' | 'quarantine') { return join(this.cfg.dropDir, sub); }
 
   async fetchApproved(_ctx: AdapterContext, _cursor: string | null, _limit: number): Promise<ErpFetchResult> {
     if (this.mode === 'mock') return { records: [], nextCursor: null, files: [] };
-    for (const s of ['incoming', 'processed', 'rejected'] as const) mkdirSync(this.dir(s), { recursive: true });
+    for (const s of ['incoming', 'processed', 'rejected', 'quarantine'] as const) mkdirSync(this.dir(s), { recursive: true, mode: 0o750 });
+    if (lstatSync(this.dir('incoming')).isSymbolicLink()) throw err('ERP_CONFIG', 'incoming/ must not be a symlink');
+    const inRoot = realpathSync(this.dir('incoming'));
     const processed = readdirSync(this.dir('processed'));
-    const names = readdirSync(this.dir('incoming')).filter((n) => /^[\w.-]+\.csv$/i.test(n) && statSync(join(this.dir('incoming'), n)).isFile()).sort();
+    const names = readdirSync(this.dir('incoming')).filter((n) => /^[\w.-]+\.csv$/i.test(n)).sort();
     const records: ErpRawRecord[] = []; const files: ErpFileResult[] = [];
     this.pending = [];
     for (const name of names) {
       const path = join(this.dir('incoming'), name);
-      if (statSync(path).size > CSV_MAX_BYTES) { files.push({ name, sha256: '', status: 'too_large' }); this.pending.push({ name, sha: 'too-large', to: 'rejected' }); continue; }
+      const st = lstatSync(path);
+      const unsafe = st.isSymbolicLink() ? 'symlink' : !st.isFile() ? 'not a regular file' : (st.mode & 0o002) ? 'world-writable' : realpathSync(path) !== join(inRoot, name) ? 'outside the drop folder' : null;
+      if (unsafe) { files.push({ name, sha256: '', status: 'unsafe_file', detail: unsafe }); this.pending.push({ name, sha: 'unsafe', to: 'rejected' }); continue; }
+      if (st.size > CSV_MAX_BYTES) { files.push({ name, sha256: '', status: 'too_large' }); this.pending.push({ name, sha: 'too-large', to: 'rejected' }); continue; }
       const buf = readFileSync(path);
       const sha = createHash('sha256').update(buf).digest('hex');
+      let scan;
+      try { scan = await this.scanner.scan(buf); } catch (e) { files.push({ name, sha256: sha, status: 'scan_failed', detail: (e as Error).message.slice(0, 120) }); continue; }
+      if (!scan.clean) { files.push({ name, sha256: sha, status: 'infected', detail: scan.signature }); this.pending.push({ name, sha, to: 'quarantine' }); continue; }
       if (processed.some((p) => p.startsWith(`${sha}-`))) { files.push({ name, sha256: sha, status: 'duplicate_file' }); this.pending.push({ name, sha, to: 'rejected' }); continue; }
       const rows = parseCsv(buf.toString('utf8').replace(/^\uFEFF/, ''));
       const header = (rows[0] ?? []).map((x) => x.trim().toLowerCase());
@@ -387,19 +404,23 @@ export class DynamicsConnector extends RestConnector {
 // ===================================================================== registry (the adapter in Adapters)
 export interface ErpConnectionDef { id: string; kind: ErpKind; config: Record<string, unknown> }
 export class ErpRegistry {
-  constructor(readonly mode: AdapterMode, private readonly env: Record<string, string | undefined>, private readonly f: typeof fetch = fetch) {}
+  private readonly guarded: typeof fetch;
+  /** every outbound ERP call goes through the S-13 allow-list guard (ERP_ALLOWED_HOSTS) */
+  constructor(readonly mode: AdapterMode, private readonly env: Record<string, string | undefined>, f: typeof fetch = fetch, private readonly scanner: FileScanner = new MockScanner()) {
+    this.guarded = guardedFetch(f, egressPolicyFromEnv(env));
+  }
   connector(c: ErpConnectionDef, secret: string | undefined): ErpConnector {
     if (this.mode === 'mock') return new MockErp(c.id);
     const cfg = c.config as any;
     if (c.kind === 'csv_sftp') {
       if (!this.env.ERP_DROP_ROOT) throw err('ERP_CONFIG', 'ERP_DROP_ROOT is not set');
-      return new CsvDropConnector(this.mode, { dropDir: join(this.env.ERP_DROP_ROOT, c.id) });
+      return new CsvDropConnector(this.mode, { dropDir: join(this.env.ERP_DROP_ROOT, c.id) }, this.scanner);
     }
     if (!secret) throw err('ERP_CONFIG', 'ERP_SECRET_MISSING: the connection secret env var is not set');
-    if (c.kind === 'odoo') return new OdooConnector(this.mode, { baseUrl: cfg.baseUrl, database: cfg.database, username: cfg.username, companyId: cfg.companyId }, secret, this.f);
-    if (c.kind === 'sap') return new SapConnector(this.mode, cfg, secret, this.f);
-    if (c.kind === 'sage') return new SageConnector(this.mode, cfg, secret, this.f);
-    return new DynamicsConnector(this.mode, cfg, secret, this.f);
+    if (c.kind === 'odoo') return new OdooConnector(this.mode, { baseUrl: cfg.baseUrl, database: cfg.database, username: cfg.username, companyId: cfg.companyId }, secret, this.guarded);
+    if (c.kind === 'sap') return new SapConnector(this.mode, cfg, secret, this.guarded);
+    if (c.kind === 'sage') return new SageConnector(this.mode, cfg, secret, this.guarded);
+    return new DynamicsConnector(this.mode, cfg, secret, this.guarded);
   }
   async health(): Promise<HealthCheck> { return { provider: 'erp', mode: this.mode, ok: this.mode === 'mock' || Boolean(this.env.ERP_DROP_ROOT), detail: this.mode === 'mock' ? undefined : `drop root ${this.env.ERP_DROP_ROOT ? 'set' : 'missing'}` }; }
 }

@@ -18,7 +18,7 @@ export type ApprovalAction =
   | 'payout_release' | 'user_role_change' | 'write_off' | 'manual_payment_match' | 'reconciliation_break_close'
   | 'etims_override' | 'bank_account_verify' | 'dispute_close' | 'lending_enable'
   | 'collections_policy_change' | 'recourse_start' | 'reconciliation_baseline_set' | 'reconciliation_break_resolve' | 'report_template_activate'
-  | 'erp_mapping_change' | 'funding_source_change' | 'funding_retag' | 'mpesa_cap_change';
+  | 'erp_mapping_change' | 'funding_source_change' | 'funding_retag' | 'mpesa_cap_change' | 'holiday_gazette';
 
 export interface ApprovalRow {
   id: string; action: ApprovalAction; entity_type: string; entity_id: string; payload: any; maker_id: string; required_role: Role; status: string;

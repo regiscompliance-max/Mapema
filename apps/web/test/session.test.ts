@@ -6,7 +6,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../lib/api';
-import { csrfToken, devSignIn, loadSession, signOut } from '../lib/session';
+import { csrfToken, devSignIn, loadSession, oidcSignIn, signOut } from '../lib/session';
 
 const walk = (d: string): string[] => readdirSync(d).flatMap((f) => { const p = join(d, f); return statSync(p).isDirectory() ? walk(p) : /\.tsx?$/.test(f) ? [p] : []; });
 const SRC = [join(__dirname, '../app'), join(__dirname, '../components'), join(__dirname, '../lib')].flatMap(walk);
@@ -28,8 +28,9 @@ describe('no tokens in browser storage', () => {
     for (const f of SRC) {
       const src = readFileSync(f, 'utf8');
       expect(src, f).not.toMatch(/localStorage/);
-      // the only sessionStorage use allowed is the one-time PKCE verifier/state during an OIDC redirect
-      for (const m of src.matchAll(/sessionStorage\.setItem\(\s*'([^']+)'/g)) expect(m[1], f).toBe('mapema.pkce');
+      // D-32 (go-live): the OIDC exchange is server-side, so the browser keeps NOTHING in web storage
+      expect(src, f).not.toMatch(/sessionStorage/);
+      expect(src, f).not.toMatch(/code_verifier|openid-connect\/token/);
       expect(src, f).not.toMatch(/Authorization:\s*`Bearer/);
       expect(src, f).not.toMatch(/setSession\(/);
     }
@@ -77,5 +78,18 @@ describe('cookie session client', () => {
     expect(calls[0].url).toMatch(/\/v1\/auth\/logout$/);
     expect(hdr(calls[0], 'X-CSRF-Token')).toBe('e'.repeat(43));
     expect(csrfToken()).toBeNull();
+  });
+});
+
+describe('D-32 OIDC via the API (BFF)', () => {
+  it('oidcSignIn asks the API to start the login and only navigates to the returned IdP URL - no PKCE, no token handling in the page', async () => {
+    const assigned: string[] = [];
+    (globalThis as any).location = { assign: (u: string) => assigned.push(u), origin: 'http://localhost:3000' };
+    mockFetch(() => ({ status: 201, body: { authorizeUrl: 'https://id.example/realms/mapema/protocol/openid-connect/auth?client_id=mapema-web&state=s' } }));
+    await oidcSignIn({ stepUp: true, returnTo: '/app/approvals' });
+    expect(calls.map((c) => c.url.replace(/^.*\/v1/, ''))).toEqual(['/auth/oidc/start']);
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({ returnTo: '/app/approvals', stepUp: true });
+    expect(calls[0].init.credentials).toBe('include');
+    expect(assigned).toEqual(['https://id.example/realms/mapema/protocol/openid-connect/auth?client_id=mapema-web&state=s']);
   });
 });

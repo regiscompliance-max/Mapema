@@ -1,0 +1,36 @@
+# [DevOps] CD to staging. MANUAL ONLY and disabled: nothing runs until Deng has created the AWS account, the GitHub
+# OIDC deploy role and the `staging` environment (required reviewer: Deng), and set the repo variable
+# STAGING_ENABLED=true. No long-lived cloud keys: the job assumes a role via GitHub OIDC.
+name: deploy-staging
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to deploy (must have passed ci)
+        required: true
+        default: main
+permissions:
+  contents: read
+  id-token: write
+concurrency: { group: deploy-staging, cancel-in-progress: false }
+jobs:
+  deploy:
+    if: vars.STAGING_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.ref }}" }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - run: npm ci && npm run build && npm test
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.STAGING_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.STAGING_REGION }}
+      # Placeholders until the account exists (docs/go-live/staging-plan.md §5):
+      # 1. docker build infra/docker/{api,web}.Dockerfile, push to ECR with the commit sha tag
+      # 2. terraform -chdir=infra/terraform plan/apply -var-file=staging.tfvars (from the environment)
+      # 3. run migrations (node scripts/migrate.mjs) as the owner role, then roll the api/worker/web hosts via SSM
+      # 4. node scripts/keycloak-configure.mjs, then smoke test GET /v1/health and the sign-in redirect
+      - run: echo "deploy steps are placeholders until staging exists" && exit 1

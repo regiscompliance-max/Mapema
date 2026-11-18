@@ -9,3 +9,9 @@ coverage/
 storage-local/
 *.tsbuildinfo
 next-env.d.ts
+
+# terraform
+.terraform/
+*.tfstate*
+*.tfvars
+!*.tfvars.example

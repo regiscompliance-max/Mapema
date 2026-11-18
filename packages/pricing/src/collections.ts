@@ -5,6 +5,7 @@
  * and are CONFIGURABLE; Kenyan counsel to confirm (Q-D) - `counselConfirmed` stays false until then.
  */
 import { addDays, daysBetween } from './dates';
+import type { BusinessCalendar } from './calendar';
 import { Cents } from './money';
 
 export interface CollectionsPolicy {
@@ -71,12 +72,21 @@ export function dpdStage(days: number, termDays: number, p: CollectionsPolicy = 
 
 export interface ReminderStep { key: string; date: string; audience: 'buyer' | 'supplier'; template: 'reminder.pre_due' | 'reminder.due' | 'reminder.overdue' | 'reminder.supplier_warning'; offset: number }
 
-export function reminderSchedule(dueDate: string, p: CollectionsPolicy = DEFAULT_COLLECTIONS_POLICY): ReminderStep[] {
+/**
+ * Reminder dates. With a business calendar (go-live, D-66) a step that lands on a weekend or Kenyan
+ * public holiday moves: pre-due reminders to the PREVIOUS business day (so they still arrive before
+ * the due date), due / overdue / supplier-warning steps to the NEXT business day. Keys never change,
+ * so a step is still sent at most once. Without a calendar: plain calendar days (unit tests, Phase 2).
+ * DPD itself stays calendar days from the contractual due date (see dpd()).
+ */
+export function reminderSchedule(dueDate: string, p: CollectionsPolicy = DEFAULT_COLLECTIONS_POLICY, cal?: BusinessCalendar): ReminderStep[] {
+  const fwd = (d: string) => (cal ? cal.onOrAfter(d) : d);
+  const back = (d: string) => (cal ? cal.onOrBefore(d) : d);
   const steps: ReminderStep[] = [];
-  for (const d of [...p.preDueDays].sort((a, b) => b - a)) steps.push({ key: `pre_${d}`, date: addDays(dueDate, -d), audience: 'buyer', template: 'reminder.pre_due', offset: -d });
-  steps.push({ key: 'due_0', date: dueDate, audience: 'buyer', template: 'reminder.due', offset: 0 });
-  for (const d of [...p.overdueDays].sort((a, b) => a - b)) steps.push({ key: `od_${d}`, date: addDays(dueDate, d), audience: 'buyer', template: 'reminder.overdue', offset: d });
-  steps.push({ key: `sup_warn_${p.supplierWarningDay}`, date: addDays(dueDate, p.supplierWarningDay), audience: 'supplier', template: 'reminder.supplier_warning', offset: p.supplierWarningDay });
+  for (const d of [...p.preDueDays].sort((a, b) => b - a)) steps.push({ key: `pre_${d}`, date: back(addDays(dueDate, -d)), audience: 'buyer', template: 'reminder.pre_due', offset: -d });
+  steps.push({ key: 'due_0', date: fwd(dueDate), audience: 'buyer', template: 'reminder.due', offset: 0 });
+  for (const d of [...p.overdueDays].sort((a, b) => a - b)) steps.push({ key: `od_${d}`, date: fwd(addDays(dueDate, d)), audience: 'buyer', template: 'reminder.overdue', offset: d });
+  steps.push({ key: `sup_warn_${p.supplierWarningDay}`, date: fwd(addDays(dueDate, p.supplierWarningDay)), audience: 'supplier', template: 'reminder.supplier_warning', offset: p.supplierWarningDay });
   return steps.sort((a, b) => (a.offset - b.offset) || (a.audience === 'buyer' ? -1 : 1));
 }
 
@@ -84,10 +94,12 @@ export function reminderSchedule(dueDate: string, p: CollectionsPolicy = DEFAULT
  * Which steps to send today. Each step goes once. After a missed run only the LATEST due step per
  * audience is sent; older unsent ones are skipped (recorded, never sent late) to avoid a burst.
  */
-export function dueReminderSteps(dueDate: string, today: string, sentKeys: string[], p: CollectionsPolicy = DEFAULT_COLLECTIONS_POLICY): { send: ReminderStep[]; skip: ReminderStep[] } {
+export function dueReminderSteps(dueDate: string, today: string, sentKeys: string[], p: CollectionsPolicy = DEFAULT_COLLECTIONS_POLICY, cal?: BusinessCalendar): { send: ReminderStep[]; skip: ReminderStep[] } {
   const send: ReminderStep[] = []; const skip: ReminderStep[] = [];
+  // with a business calendar nothing goes out on a weekend / public holiday; the next business day catches up
+  if (cal && !cal.isBusinessDay(today)) return { send, skip };
   for (const audience of ['buyer', 'supplier'] as const) {
-    const pending = reminderSchedule(dueDate, p).filter((s) => s.audience === audience && s.date <= today && !sentKeys.includes(s.key));
+    const pending = reminderSchedule(dueDate, p, cal).filter((s) => s.audience === audience && s.date <= today && !sentKeys.includes(s.key));
     if (pending.length === 0) continue;
     send.push(pending[pending.length - 1]);
     skip.push(...pending.slice(0, -1));

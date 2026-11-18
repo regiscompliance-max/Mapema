@@ -90,8 +90,15 @@ export class SelfService {
   async staffUsers() {
     const rows = await this.db.query(`SELECT u.id, u.email, u.display_name, u.active, u.access_expires_at, u.mfa_methods, array_agg(r.role::text ORDER BY r.role::text) AS roles
       FROM user_account u JOIN user_role_assignment r ON r.user_id = u.id AND r.revoked_at IS NULL
-      WHERE r.role IN ('credit','ops','compliance','admin','ceo','auditor','lender') GROUP BY u.id ORDER BY u.email`);
+      WHERE r.role IN ('credit','ops','compliance','admin','ceo','auditor','lender') AND NOT u.is_integration GROUP BY u.id ORDER BY u.email`);
     return rows;
+  }
+
+  /** S-14: service accounts are reviewed separately (they have no roles and cannot sign in). */
+  serviceAccounts() {
+    return this.db.query(`SELECT u.id, u.display_name, u.active, u.created_at, c.id AS connection_id, c.name AS connection_name, c.status AS connection_status, o.legal_name AS buyer
+      FROM user_account u LEFT JOIN erp_connection c ON c.integration_user_id = u.id LEFT JOIN organisation o ON o.id = c.buyer_id
+      WHERE u.is_integration ORDER BY u.created_at`);
   }
 }
 
@@ -125,4 +132,7 @@ export class SelfServiceController {
 
   @Get('admin/users') @Roles('admin', 'ceo', 'compliance')
   staff() { return this.s.staffUsers(); }
+
+  @Get('admin/service-accounts') @Roles('admin', 'ceo', 'compliance')
+  serviceAccounts() { return this.s.serviceAccounts(); }
 }

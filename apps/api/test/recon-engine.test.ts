@@ -4,6 +4,7 @@
  * Sign convention: a break's amount is its contribution to (bank - platform) or (fineract - platform).
  */
 import { describe, expect, it } from 'vitest';
+import { BusinessCalendar } from '@mapema/pricing';
 import { classifyRecon, ReconInput } from '../src/modules/recon-engine';
 
 const base = (o: Partial<ReconInput> = {}): ReconInput => ({
@@ -89,5 +90,21 @@ describe('TC-P2U-REC recon engine', () => {
     // carry-forward is per amount: if the amount changes it is unexplained again
     const r2 = classifyRecon(base({ bankBalanceCents: 7_001n, statement: [{ bankRef: 'REV1', valueDate: '2027-02-01', amountCents: 7_001n, type: 'credit' }], carryForward: [{ itemKey: 'bank:REV1', approvalId: 'appr-1', amountCents: 7_000n }] }));
     expect(r2.breaks[0]).toMatchObject({ classification: 'unexplained' });
+  });
+});
+
+describe('TC-GL-REC-HOL timing window uses the Kenyan public-holiday calendar (D-66, closes Q-G)', () => {
+  // Easter 2027: Good Friday 26 March, Easter Monday 29 March. As of Tuesday 30 March, ONE business day back is Thursday 25 March.
+  const cal = new BusinessCalendar();
+  const payout = (date: string) => base({ asOf: '2027-03-30', calendar: cal, bankBalanceCents: 0n, fineractBalanceCents: -1_000_000n, platformBalanceCents: -1_000_000n,
+    platformItems: [{ ref: 'MBX', date, amountCents: -1_000_000n, source: 'payout' }] });
+  it('a payout released on the Thursday before Good Friday is still in transit on Tuesday (holidays are not business days)', () => {
+    expect(classifyRecon(payout('2027-03-25')).breaks[0]).toMatchObject({ classification: 'timing', category: 'payout_in_transit', expectedClearBy: '2027-03-31' });
+    // weekends-only (Phase 2 behaviour) would have called the same item unexplained
+    expect(classifyRecon({ ...payout('2027-03-25'), calendar: undefined }).breaks[0]).toMatchObject({ classification: 'unexplained' });
+  });
+  it('a credit on the as-of day before Christmas expects to clear on the next business day (28 December 2026)', () => {
+    const r = classifyRecon(base({ asOf: '2026-12-24', calendar: cal, bankBalanceCents: 5_000_000n, statement: [{ bankRef: 'FTX', valueDate: '2026-12-24', amountCents: 5_000_000n, type: 'credit' }] }));
+    expect(r.breaks[0]).toMatchObject({ classification: 'timing', expectedClearBy: '2026-12-28' });
   });
 });

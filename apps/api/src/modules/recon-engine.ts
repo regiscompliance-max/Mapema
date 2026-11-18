@@ -14,9 +14,10 @@
  *                 approved resolution for the SAME amount
  *   unexplained - everything else, including any residual the items do not account for
  * Sign: a break's amount is its contribution to (bank - platform) or (fineract - platform).
- * Business days skip Saturday/Sunday only; Kenyan public holidays are not modelled (assumption, D-39).
+ * Business days skip weekends AND Kenyan public holidays (Public Holidays Act, Cap. 110 + gazetted days) when
+ * the API passes its calendar (go-live D-66, closes Q-G); without one, weekends only (pure unit tests).
  */
-import { addDays } from '@mapema/pricing';
+import { BusinessCalendar } from '@mapema/pricing';
 
 export interface StatementLineIn { bankRef: string; valueDate: string; amountCents: bigint; type: 'credit' | 'debit' | 'return' | 'charge' | 'interest'; narrative?: string }
 export interface PlatformItem { ref: string; date: string; amountCents: bigint; source: 'bank_transaction' | 'funding' | 'payout' | 'payout_return' }
@@ -29,6 +30,8 @@ export interface ReconInput {
   baseline: { bankCents: bigint; fineractCents: bigint; platformCents: bigint };
   statement: StatementLineIn[]; platformItems: PlatformItem[]; pendingPostings: PendingPosting[]; carryForward: CarryForward[];
   timingWindowBusinessDays: number;
+  /** business-day calendar for the timing window (weekends + Kenyan public holidays in the API) */
+  calendar?: BusinessCalendar;
 }
 
 export type Classification = 'timing' | 'explained' | 'unexplained';
@@ -42,11 +45,10 @@ export interface ReconResult {
   breaks: ClassifiedBreak[]; unexplainedCount: number; status: 'balanced' | 'explained' | 'breaks';
 }
 
-const dow = (d: string) => new Date(`${d}T00:00:00Z`).getUTCDay();
-export function addBusinessDays(d: string, n: number): string {
-  let cur = d; let left = Math.abs(n); const step = n >= 0 ? 1 : -1;
-  while (left > 0) { cur = addDays(cur, step); if (dow(cur) !== 0 && dow(cur) !== 6) left--; }
-  return cur;
+const WEEKENDS_ONLY = BusinessCalendar.weekendsOnly();
+/** Business-day step on the given calendar (go-live: Kenyan public holidays, D-66; default weekends only). */
+export function addBusinessDays(d: string, n: number, cal: BusinessCalendar = WEEKENDS_ONLY): string {
+  return cal.addBusinessDays(d, n);
 }
 
 export function classifyRecon(i: ReconInput): ReconResult {
@@ -60,8 +62,9 @@ export function classifyRecon(i: ReconInput): ReconResult {
     fineractVsPlatformCents: movements.fineractCents - movements.platformCents,
     bankVsFineractCents: movements.bankCents - movements.fineractCents,
   };
-  const windowStart = addBusinessDays(i.asOf, -i.timingWindowBusinessDays);
-  const nextBiz = addBusinessDays(i.asOf, 1);
+  const cal = i.calendar ?? WEEKENDS_ONLY;
+  const windowStart = addBusinessDays(i.asOf, -i.timingWindowBusinessDays, cal);
+  const nextBiz = addBusinessDays(i.asOf, 1, cal);
   const cf = new Map(i.carryForward.map((c) => [c.itemKey, c]));
   const breaks: ClassifiedBreak[] = [];
   const add = (b: ClassifiedBreak) => {

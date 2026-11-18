@@ -89,6 +89,17 @@ export class TokenVerifier {
       throw new DomainError(401, 'INVALID_TOKEN', 'Session expired or invalid; sign in again');
     }
   }
+
+  /** D-32 BFF: the OIDC ID token from the code exchange - issuer, audience = our client id, and the nonce we sent. */
+  async verifyIdToken(token: string, nonce: string, clientId: string): Promise<JWTPayload> {
+    const { payload } = await jwtVerify(token, this.keySet(), {
+      issuer: this.cfg.DEV_IDP_ENABLED === 'true' ? this.devIdp.issuer : this.cfg.OIDC_ISSUER,
+      audience: clientId,
+      algorithms: ['RS256', 'ES256'],
+    });
+    if (payload.nonce !== nonce) throw new Error('nonce mismatch');
+    return payload;
+  }
 }
 
 /** Turns a verified identity (from a bearer token or a server-side session) into an AuthUser, enforcing MFA and account status. */
@@ -101,10 +112,11 @@ export class Identity {
       throw new DomainError(401, 'MFA_REQUIRED', 'Multi-factor sign-in is required');
     }
     const user = await this.db.one(
-      `SELECT id, email, display_name, active, access_expires_at FROM user_account WHERE idp_subject = $1`,
+      `SELECT id, email, display_name, active, access_expires_at, is_integration FROM user_account WHERE idp_subject = $1`,
       [id.sub],
     );
-    if (!user || !user.active) throw new DomainError(401, 'NO_ACCOUNT', 'No active Mapema account for this sign-in');
+    // S-14: service (integration) users never sign in, whatever the IdP says
+    if (!user || !user.active || user.is_integration || id.sub.startsWith('erp-integration:')) throw new DomainError(401, 'NO_ACCOUNT', 'No active Mapema account for this sign-in');
     if (user.access_expires_at && new Date(user.access_expires_at) < new Date()) {
       throw new DomainError(401, 'ACCESS_EXPIRED', 'Your time-boxed access has expired');
     }

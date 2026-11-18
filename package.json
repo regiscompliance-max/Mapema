@@ -28,11 +28,17 @@
     "dev:worker": "npm run dev -w @mapema/worker",
     "openapi:gen": "node scripts/gen-openapi.mjs",
     "test:e2e:fineract": "E2E_LEDGER=fineract npm run test -w @mapema/api",
-    "test:worker": "npm run test -w @mapema/worker"
+    "test:worker": "npm run test -w @mapema/worker",
+    "lint": "eslint . --max-warnings=0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@redocly/cli": "^2.0.0",
+    "@types/node": "^24.0.0",
+    "eslint": "^10.15.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
     "typescript": "^5.9.0",
-    "@types/node": "^24.0.0"
+    "typescript-eslint": "^8.73.0"
   }
 }

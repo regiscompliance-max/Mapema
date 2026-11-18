@@ -21,6 +21,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { addDays, kes } from '@mapema/pricing';
 import { FakeOdoo, MockMpesa } from '@mapema/adapters';
 import { Harness, startHarness } from './harness';
+import { batchStepUpValid, BulkService } from '../src/modules/bulk';
 import { AT, buildWorld, eligibleInvoice, LEDGER_ENV, REAL_LEDGER, seedFunding, World, WORKED } from './world';
 
 let h: Harness; let w: World; let odoo: FakeOdoo; let odooUrl: string;
@@ -56,7 +57,7 @@ beforeAll(async () => {
   odoo.addPartner(42, 'Jua Kali Packaging Ltd', 'P051111111B');
   odoo.addPartner(43, 'Unknown Traders Ltd', 'P059999999Z');
   odooUrl = await odoo.listen();
-  h = await startHarness({ ...LEDGER_ENV, ADAPTER_MODE_ERP: 'sandbox', ERP_DROP_ROOT: DROP, ERP_SECRET_ACME_ODOO: 'k-acme-odoo',
+  h = await startHarness({ ...LEDGER_ENV, ADAPTER_MODE_ERP: 'sandbox', ERP_DROP_ROOT: DROP, ERP_SECRET_ACME_ODOO: 'k-acme-odoo', ERP_ALLOWED_HOSTS: '127.0.0.1', ERP_ALLOW_HTTP: 'true',
     MPESA_CALLBACK_TOKEN: 'test-mpesa-callback-token-1234', MPESA_RESULT_TIMEOUT_MINUTES: '30' });
   w = await buildWorld(h, { floatCents: 10_000_000_000n, supplierLimitCents: 1_000_000_000n, tag: 'p3' });
   await seedFunding(h, w, 1_000_000_000n, 'EQ-P3-0001');
@@ -430,6 +431,26 @@ describe(`Phase 3 [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
     expect(await h.adapters.bank.getBalance()).toBe(bankBefore);
   });
 
+  it('TC-GL-S15 batch step-up window: once the approver\'s authentication is older than BATCH_STEP_UP_WINDOW_SEC, remaining items are not released (STEP_UP_EXPIRED)', async () => {
+    const bulk = h.app.get(BulkService);
+    const real = bulk.nowSec;
+    bulk.nowSec = () => real() + 3600; // the release loop runs an hour after the approver's step-up
+    try {
+      const bankBefore = await h.adapters.bank.getBalance();
+      const auditBefore = Number((await h.admin.query(`SELECT count(*) FROM mapema.audit_event WHERE action LIKE 'advance.release%'`)).rows[0].count);
+      const b = await w.ops.post('/payout-batches', { advanceIds: [ids.held], note: 'Late batch' });
+      const done = await w.ops2.post(`/payout-batches/${b.id}/approve`, { rejectItems: [] });
+      expect(done.status).toBe('failed');
+      expect(done.items[0]).toMatchObject({ status: 'failed', errorCode: 'STEP_UP_EXPIRED' });
+      expect(await h.adapters.bank.getBalance()).toBe(bankBefore);
+      expect(Number((await h.admin.query(`SELECT count(*) FROM mapema.audit_event WHERE action LIKE 'advance.release%'`)).rows[0].count)).toBe(auditBefore);
+      expect((await adv(ids.held)).status).toBe('approved'); // can be re-batched for a fresh approval
+    } finally { bulk.nowSec = real; }
+    expect(batchStepUpValid(1000, 1900, 900)).toBe(true);
+    expect(batchStepUpValid(1000, 1901, 900)).toBe(false);
+    expect(batchStepUpValid(0, 10, 900)).toBe(false);
+  });
+
   // ------------------------------------------------------------------ per-funder lender pack
   it('TC-P3-FUND-05 per-funder lender pack: facility A sees only its loans (tag at month end), reproducible to the byte', async () => {
     const monthEnd = (() => { const d = new Date(`${Q}T00:00:00Z`); d.setUTCMonth(d.getUTCMonth() + 1, 0); return d.toISOString().slice(0, 10); })();
@@ -441,7 +462,9 @@ describe(`Phase 3 [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
     expect(g.artifacts.map((a: any) => a.filename)).toEqual(expect.arrayContaining([expect.stringContaining('FAC-A')]));
     const again = await w.ceo.post(`/reports/snapshots/${snap.id}/generate`, { kind: 'lender_pack', fundingSource: 'FAC-A' });
     expect(again.artifacts.map((a: any) => a.sha256)).toEqual(g.artifacts.map((a: any) => a.sha256));
-    const tape = (await h.admin.query(`SELECT convert_from(content, 'UTF8') AS t FROM mapema.report_artifact WHERE id = $1`, [g.artifacts.find((a: any) => /loan-tape/.test(a.filename)).id])).rows[0].t;
+    // S-09: artefacts are encrypted at rest, so read the tape through the download endpoint
+    const tapeId = g.artifacts.find((a: any) => /loan-tape/.test(a.filename)).id;
+    const tape = (await h.http.get(`/v1/reports/artifacts/${tapeId}/download`).set('Authorization', `Bearer ${await h.staff.ceo.token()}`).expect(200)).text;
     expect(tape).toContain('INV-P3-F1');
     expect(tape).not.toContain('ODOO-1');
     const eq = await w.ceo.post(`/reports/snapshots/${snap.id}/generate`, { kind: 'lender_pack', fundingSource: 'EQUITY' });

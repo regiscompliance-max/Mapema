@@ -18,6 +18,7 @@ import { zText, zUuid } from '../common/http';
 import { Notifier } from '../common/notify';
 import { AuthUser, CurrentUser, Roles } from '../auth/auth';
 import { ApprovalsService } from './approvals';
+import { HolidaysService } from './holidays';
 import { classifyRecon, PendingPosting, PlatformItem } from './recon-engine';
 
 const ISO = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -32,6 +33,7 @@ export class ReconciliationService implements OnModuleInit {
     private readonly notifier: Notifier,
     private readonly approvals: ApprovalsService,
     @Inject(ADAPTERS) private readonly adapters: Adapters,
+    private readonly holidays: HolidaysService,
   ) {}
 
   onModuleInit() {
@@ -117,7 +119,7 @@ export class ReconciliationService implements OnModuleInit {
         WHERE item_key IS NOT NULL AND carry_forward AND status = 'explained' AND closed_via IS NOT NULL ORDER BY item_key, updated_at DESC`))
       .map((r) => ({ itemKey: r.item_key, approvalId: r.closed_via, amountCents: toCents(r.difference_cents) }));
     const res = classifyRecon({ asOf: date, bankBalanceCents: bank, fineractBalanceCents: fineract, platformBalanceCents: plat.balance, baseline,
-      statement, platformItems: plat.items, pendingPostings: await this.pending(), carryForward: carry, timingWindowBusinessDays: 1 });
+      statement, platformItems: plat.items, pendingPostings: await this.pending(), carryForward: carry, timingWindowBusinessDays: 1, calendar: await this.holidays.calendar() });
 
     return this.db.tx(async (c) => {
       const detail = JSON.stringify({ movements: res.movements, differences: res.differences, baselineId: bl?.id ?? null }, (_k, v) => (typeof v === 'bigint' ? v.toString() : v));

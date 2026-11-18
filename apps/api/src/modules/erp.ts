@@ -16,7 +16,7 @@
  */
 import { Body, Controller, Get, Inject, Injectable, OnModuleInit, Param, Post, Query } from '@nestjs/common';
 import { z } from 'zod';
-import { AdapterError, DEFAULT_ERP_MAPPINGS, ERP_KINDS, ErpKind, ErpMapping, ErpRawRecord, mapErpRecord, MockErp, validateErpMapping } from '@mapema/adapters';
+import { AdapterError, checkEgressUrl, DEFAULT_ERP_MAPPINGS, egressPolicyFromEnv, ERP_KINDS, ErpKind, ErpMapping, ErpRawRecord, mapErpRecord, MockErp, validateErpMapping } from '@mapema/adapters';
 import type { Adapters } from '@mapema/adapters';
 import { Audit, SYSTEM } from '../common/audit';
 import { ADAPTERS, AppConfig, CONFIG } from '../common/config';
@@ -74,12 +74,15 @@ export class ErpService implements OnModuleInit {
     if (b.kind !== 'csv_sftp' && this.adapters.erp.mode !== 'mock') {
       if (!b.secretEnv) throw badRequest('SECRET_ENV_REQUIRED', 'Name the ERP_SECRET_* variable that holds the API key');
       if (!b.config.baseUrl) throw badRequest('BASE_URL_REQUIRED', 'baseUrl is required');
+      // S-13: only allow-listed https hosts (ERP_ALLOWED_HOSTS); the connector re-checks DNS on every call
+      const deny = checkEgressUrl(b.config.baseUrl, egressPolicyFromEnv(this.cfg.raw));
+      if (deny) throw badRequest(deny, deny === 'ERP_HTTPS_REQUIRED' ? 'The ERP address must use https' : deny === 'ERP_PRIVATE_ADDRESS' ? 'Private and internal network addresses are not allowed' : 'This ERP host is not on the platform allow-list (ERP_ALLOWED_HOSTS); ask the security engineer to add it');
     }
     return this.db.tx(async (c) => {
       const buyer = (await c.query(`SELECT id, type FROM organisation WHERE id = $1`, [b.buyerId])).rows[0];
       if (!buyer || buyer.type !== 'buyer') throw notFound('Buyer');
       const id = (await c.query(`SELECT gen_random_uuid() AS id`)).rows[0].id;
-      const iu = (await c.query(`INSERT INTO user_account (idp_subject, email, display_name, mfa_enabled, active) VALUES ($1,$2,$3,false,false) RETURNING id`,
+      const iu = (await c.query(`INSERT INTO user_account (idp_subject, email, display_name, mfa_enabled, active, is_integration) VALUES ($1,$2,$3,false,false,true) RETURNING id`,
         [`erp-integration:${id}`, `erp-${id}@integration.mapema.invalid`, `ERP import (${b.name})`])).rows[0];
       await c.query(`INSERT INTO erp_connection (id, buyer_id, kind, name, config, secret_env, integration_user_id, created_by) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8)`,
         [id, b.buyerId, b.kind, b.name, JSON.stringify(b.config), b.secretEnv ?? null, iu.id, u.id]);

@@ -10,10 +10,11 @@
  *    re-run per item, under the release lock), so one failure never stops the others. Every step is
  *    audited at batch and item level.
  */
-import { Body, Controller, Get, Injectable, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Injectable, Param, Post } from '@nestjs/common';
 import { z } from 'zod';
 import { formatKes } from '@mapema/pricing';
 import { Audit } from '../common/audit';
+import { AppConfig, CONFIG } from '../common/config';
 import { Db, toCents } from '../common/db';
 import { badRequest, conflict, DomainError, forbidden, notFound } from '../common/errors';
 import { zText, zUuid } from '../common/http';
@@ -22,11 +23,26 @@ import { AuthUser, CurrentUser, Roles, StepUp } from '../auth/auth';
 import { AdvancesService } from './advances';
 import { InvoicesService } from './invoices';
 
+/**
+ * S-15 (go-live): a batch is released item by item after the approval; a long batch could outlive the
+ * approver's step-up. Each item re-checks that the approver's authentication (auth_time) is still within
+ * BATCH_STEP_UP_WINDOW_SEC (default 900 s); once it is not, the remaining items are NOT released
+ * (status failed, STEP_UP_EXPIRED) and the batch ends partially_failed / failed. The advances stay
+ * approved, so ops can put them in a new batch for a fresh approval.
+ */
+export function batchStepUpValid(authTimeSec: number, nowSec: number, windowSec: number): boolean {
+  return Number.isFinite(authTimeSec) && authTimeSec > 0 && nowSec - authTimeSec <= windowSec;
+}
+
 const err = (e: unknown) => (e instanceof DomainError ? { error: e.code, message: e.message, ...(e.extra ?? {}) } : { error: 'INTERNAL', message: (e as Error).message.slice(0, 200) });
 
 @Injectable()
 export class BulkService {
-  constructor(private readonly db: Db, private readonly audit: Audit, private readonly notifier: Notifier, private readonly invoices: InvoicesService, private readonly advances: AdvancesService) {}
+  constructor(private readonly db: Db, private readonly audit: Audit, private readonly notifier: Notifier, private readonly invoices: InvoicesService, private readonly advances: AdvancesService,
+    @Inject(CONFIG) private readonly cfg: AppConfig) {}
+  /** wall clock (auth_time is wall-clock epoch seconds from the IdP); replaceable in tests */
+  nowSec: () => number = () => Math.floor(Date.now() / 1000);
+  private windowSec() { return Math.max(60, Number(this.cfg.raw.BATCH_STEP_UP_WINDOW_SEC ?? 900)); }
 
   async bulkDecision(u: AuthUser, ids: string[], decision: 'approve' | 'reject', reasonCode?: string, reasonText?: string) {
     const results = [];
@@ -108,7 +124,9 @@ export class BulkService {
         continue;
       }
       let status: 'released' | 'failed' = 'released'; let code: string | null = null; let detail: unknown = null;
-      try {
+      if (!batchStepUpValid(u.authTime, this.nowSec(), this.windowSec())) {
+        status = 'failed'; code = 'STEP_UP_EXPIRED'; detail = { message: 'The approver\'s step-up expired during the batch; re-batch the remaining advances and approve again', windowSec: this.windowSec() };
+      } else try {
         const a: any = await this.advances.release(u, it.advance_id, { fromBatch: id });
         if (a.status === 'release_failed') { status = 'failed'; code = String(a.decline_reason ?? '').replace(/^(bank|mpesa): /, '').split(':')[0] || 'RELEASE_FAILED'; }
       } catch (e) {

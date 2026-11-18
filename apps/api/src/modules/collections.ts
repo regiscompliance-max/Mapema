@@ -22,6 +22,7 @@ import { zText, zUuid } from '../common/http';
 import { Notifier } from '../common/notify';
 import { AuthUser, CurrentUser, Roles, STAFF_ROLES, StepUp } from '../auth/auth';
 import { ApprovalsService } from './approvals';
+import { HolidaysService } from './holidays';
 
 const PolicyBody = z.object({
   preDueDays: z.array(z.number().int()), overdueDays: z.array(z.number().int()), supplierWarningDay: z.number().int(), recourseAfterDays: z.number().int(),
@@ -37,6 +38,7 @@ export class CollectionsService implements OnModuleInit {
     private readonly notifier: Notifier,
     private readonly approvals: ApprovalsService,
     @Inject(ADAPTERS) private readonly adapters: Adapters,
+    private readonly holidays: HolidaysService,
   ) {}
 
   onModuleInit() {
@@ -84,6 +86,7 @@ export class CollectionsService implements OnModuleInit {
        FROM advance a JOIN invoice i ON i.id = a.invoice_id LEFT JOIN collection_account ca ON ca.buyer_id = a.buyer_id
        WHERE a.status IN ('funded','late','recourse','non_performing') ORDER BY a.due_date, a.id`);
     const out = { checked: rows.length, actions: [] as { advanceId: string; stage: string }[], reminders: [] as any[], skipped: [] as any[], moves: [] as any[], recourseCases: [] as any[], waivers: [] as any[] };
+    const cal = await this.holidays.calendar(); // reminders move off weekends and Kenyan public holidays (D-66)
     for (const r of rows) {
       const d = dpd(r.due_date, today);
       const term = r.term_days ?? 120;
@@ -99,7 +102,7 @@ export class CollectionsService implements OnModuleInit {
         const params = { invoice: r.invoice_number, amount: formatKes(toCents(r.amount_cents)), due: r.due_date, account: r.virtual_account_no ?? '-', days: String(d) };
         // 1. reminders (not while the invoice is disputed - BUY-07 freezes collections)
         if (r.invoice_status !== 'disputed') {
-          const { send, skip } = dueReminderSteps(r.due_date, today, r.sent ?? [], policy);
+          const { send, skip } = dueReminderSteps(r.due_date, today, r.sent ?? [], policy, cal);
           for (const s of skip) {
             await c.query(`INSERT INTO reminder_event (advance_id, step_key, audience, scheduled_for, status, run_date) VALUES ($1,$2,$3,$4,'skipped',$5) ON CONFLICT DO NOTHING`, [r.id, s.key, s.audience, s.date, today]);
             out.skipped.push({ advanceId: r.id, key: s.key });

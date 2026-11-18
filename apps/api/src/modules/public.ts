@@ -23,7 +23,7 @@ export class PublicService {
   constructor(private readonly db: Db, private readonly audit: Audit, private readonly crypto: FieldCrypto, private readonly settings: SettingsService, @Inject(ADAPTERS) private readonly adapters: Adapters, @Inject(CONFIG) private readonly cfg: AppConfig) {}
 
   async health() {
-    let db = false;
+    let db: boolean;
     try { await this.db.query('SELECT 1'); db = true; } catch { db = false; }
     const providers = [];
     for (const [name, a] of Object.entries(this.adapters)) {

@@ -12,7 +12,7 @@
  *  - receiver name returned by M-Pesa is compared with the registered wallet name -> AML flag on mismatch
  */
 import { timingSafeEqual } from 'node:crypto';
-import { Body, Controller, Get, HttpCode, Inject, Injectable, OnModuleInit, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Injectable, OnModuleInit, Param, Post, Req } from '@nestjs/common';
 import { z } from 'zod';
 import { type Adapters, AdapterError, B2cResult, MPESA_MAX_CENTS, MPESA_MIN_CENTS, normaliseMsisdn, parseB2cResult } from '@mapema/adapters';
 import { formatKes } from '@mapema/pricing';
@@ -24,6 +24,7 @@ import { Db, toCents } from '../common/db';
 import { badRequest, DomainError, forbidden, notFound } from '../common/errors';
 import { zCents, zText, zUuid } from '../common/http';
 import { Notifier } from '../common/notify';
+import { ipAllowList } from '../common/redact';
 import { assertOrgAccess, AuthUser, CurrentUser, Public, Roles, StepUp } from '../auth/auth';
 import { AdvancesService } from './advances';
 import { SettingsService } from './admin';
@@ -79,10 +80,25 @@ export class MpesaService implements OnModuleInit {
   }
 
   // ------------------------------------------------------------------ callbacks
-  checkToken(token: string) {
-    const want = this.cfg.raw.MPESA_CALLBACK_TOKEN ?? '';
-    const a = Buffer.from(token); const b = Buffer.from(want);
-    if (want.length < 16 || a.length !== b.length || !timingSafeEqual(a, b)) throw new DomainError(401, 'BAD_CALLBACK_TOKEN', 'Unknown callback');
+  /**
+   * S-12: the path token is compared in constant time against the current token and, during a
+   * rotation (new URLs re-registered with Safaricom), the previous one; use of the previous token is
+   * audited so ops know when it can be removed. When MPESA_CALLBACK_ALLOWED_IPS is set, the caller's
+   * address (behind exactly one trusted proxy) must be in it. Failures all look the same to the caller.
+   */
+  private allowIp?: ReturnType<typeof ipAllowList>;
+  checkToken(token: string, ip?: string): 'current' | 'previous' {
+    const deny = () => new DomainError(401, 'BAD_CALLBACK_TOKEN', 'Unknown callback');
+    if (this.allowIp === undefined) this.allowIp = ipAllowList(this.cfg.raw.MPESA_CALLBACK_ALLOWED_IPS);
+    if (this.allowIp && !this.allowIp(ip)) throw deny();
+    const eq = (want: string | undefined) => {
+      if (!want || want.length < 16) return false;
+      const a = Buffer.from(token); const b = Buffer.from(want);
+      return a.length === b.length && timingSafeEqual(a, b);
+    };
+    if (eq(this.cfg.raw.MPESA_CALLBACK_TOKEN)) return 'current';
+    if (eq(this.cfg.raw.MPESA_CALLBACK_TOKEN_PREVIOUS)) return 'previous';
+    throw deny();
   }
 
   private async payoutFor(orig: string) {
@@ -90,7 +106,8 @@ export class MpesaService implements OnModuleInit {
       WHERE p.idempotency_key = $1 AND p.rail = 'mpesa_b2c'`, [orig]);
   }
 
-  async onCallback(kind: 'result' | 'timeout', body: unknown) {
+  async onCallback(kind: 'result' | 'timeout', body: unknown, tokenUsed: 'current' | 'previous' = 'current') {
+    if (tokenUsed === 'previous') await this.db.tx((c) => this.audit.record(c, SYSTEM, 'mpesa.callback_previous_token', 'platform_setting', null, null, { kind }));
     let r: B2cResult;
     try { r = parseB2cResult(body); } catch { throw badRequest('BAD_CALLBACK', 'Not a Daraja B2C result'); }
     const p = await this.payoutFor(r.originatorConversationId);
@@ -197,8 +214,8 @@ export class MpesaController {
   }
 
   @Public() @HttpCode(200) @Post('webhooks/mpesa/b2c/result/:token')
-  result(@Param('token') token: string, @Body() b: unknown) { this.s.checkToken(token); return this.s.onCallback('result', b); }
+  result(@Param('token') token: string, @Body() b: unknown, @Req() req: any) { const t = this.s.checkToken(token, req.ip); return this.s.onCallback('result', b, t); }
 
   @Public() @HttpCode(200) @Post('webhooks/mpesa/b2c/timeout/:token')
-  timeout(@Param('token') token: string, @Body() b: unknown) { this.s.checkToken(token); return this.s.onCallback('timeout', b); }
+  timeout(@Param('token') token: string, @Body() b: unknown, @Req() req: any) { const t = this.s.checkToken(token, req.ip); return this.s.onCallback('timeout', b, t); }
 }

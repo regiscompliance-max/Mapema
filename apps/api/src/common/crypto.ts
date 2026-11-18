@@ -46,3 +46,47 @@ export class FieldCrypto {
 }
 
 export const mask = (s: string | null | undefined, keep = 4) => (s ? `${'•'.repeat(Math.max(0, s.length - keep))}${s.slice(-keep)}` : null);
+
+/**
+ * [Security Engineer] S-09 (go-live): report artefacts (CRB submission files carry borrower
+ * identifiers; CBK returns, lender packs, loan tapes) are encrypted at the application level before
+ * they reach Postgres, so a database dump, replica or backup alone does not disclose them.
+ *  - AES-256-GCM, random 96-bit IV, envelope "MRA1" | iv(12) | tag(16) | ciphertext
+ *  - key = HMAC-SHA256(STORAGE_ENCRYPTION_KEY, "mapema-report-artifact-v1") (domain-separated from
+ *    the document store's use of the same key); production key from the KMS / secrets manager
+ *  - AAD binds the ciphertext to its row (snapshot, template, filename): moving it to another row fails
+ *  - sha256 stays over the PLAINTEXT, so reproducibility checks and download hashes are unchanged
+ *  - legacy plaintext rows (encrypted = false) are still readable; scripts/encrypt-report-artifacts.mjs
+ *    re-encrypts them as the migration owner (the app role cannot UPDATE artefacts: append-only)
+ */
+const ARTIFACT_MAGIC = Buffer.from('MRA1');
+@Injectable()
+export class ArtifactCrypto {
+  private readonly key: Buffer;
+  constructor(@Inject(CONFIG) cfg: AppConfig) {
+    this.key = ArtifactCrypto.deriveKey(cfg.STORAGE_ENCRYPTION_KEY);
+  }
+  static deriveKey(storageKeyHex: string) {
+    return createHmac('sha256', Buffer.from(storageKeyHex, 'hex')).update('mapema-report-artifact-v1').digest();
+  }
+  static aad(snapshotId: string, templateId: string | null, filename: string) {
+    return Buffer.from(`${snapshotId}|${templateId ?? ''}|${filename}`, 'utf8');
+  }
+  static isEnvelope(b: Buffer) { return b.length > 32 && b.subarray(0, 4).equals(ARTIFACT_MAGIC); }
+  static sealWith(key: Buffer, plain: Buffer, aad: Buffer): Buffer {
+    const iv = randomBytes(12);
+    const c = createCipheriv('aes-256-gcm', key, iv);
+    c.setAAD(aad);
+    const ct = Buffer.concat([c.update(plain), c.final()]);
+    return Buffer.concat([ARTIFACT_MAGIC, iv, c.getAuthTag(), ct]);
+  }
+  static openWith(key: Buffer, blob: Buffer, aad: Buffer): Buffer {
+    if (!ArtifactCrypto.isEnvelope(blob)) throw new Error('not an encrypted report artefact');
+    const d = createDecipheriv('aes-256-gcm', key, blob.subarray(4, 16));
+    d.setAAD(aad);
+    d.setAuthTag(blob.subarray(16, 32));
+    return Buffer.concat([d.update(blob.subarray(32)), d.final()]);
+  }
+  seal(plain: Buffer, aad: Buffer) { return ArtifactCrypto.sealWith(this.key, plain, aad); }
+  open(blob: Buffer, aad: Buffer, encrypted: boolean): Buffer { return encrypted ? ArtifactCrypto.openWith(this.key, blob, aad) : blob; }
+}

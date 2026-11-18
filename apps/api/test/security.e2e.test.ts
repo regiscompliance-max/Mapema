@@ -10,7 +10,7 @@ import { addDays } from '@mapema/pricing';
 import { createAdapters } from '@mapema/adapters';
 import { loadConfig } from '../src/common/config';
 import { client, Harness, startHarness } from './harness';
-import { AT, buildWorld, eligibleInvoice, fund, seedFunding, World, WORKED } from './world';
+import { AT, buildWorld, eligibleInvoice, seedFunding, World, WORKED } from './world';
 
 let h: Harness; let w: World;
 beforeAll(async () => { h = await startHarness(); w = await buildWorld(h, { supplierLimitCents: 200_000_000n }); await seedFunding(h, w, 1_000_000_000n); });
