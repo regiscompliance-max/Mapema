@@ -77,3 +77,7 @@ CEO approved Phase 2 and its defaults Q-A to Q-J as recorded in docs/phase-2/REA
 | D-61 | Funding: each source is a Fineract fund, set on the loan at origination (`fundId`; Fineract does not allow changing it on an active loan). The current tag lives in the loan datatable `mapema_funding_tag`; re-tags update it after commit and a consistency check compares platform and Fineract. |
 | D-62 | Funding sources and re-tags are approved by the CEO. At release the system validates the source credit named (eligibility, headroom, covenants pro forma) or auto-picks the first eligible source by priority. With no sources configured, advances stay untagged (Phase 2 behaviour). |
 | D-63 | The per-funder lender pack uses the tag history as at month end, recomputes the loan-level summary for that funder's loans, keeps platform-wide lines as they are, and is reproducible byte for byte. |
+
+## D-64 Phase 3 sign-off (18 Nov 2026, 06:52 GMT)
+
+CEO approved Phase 3 and its defaults Q-K to Q-R as recorded in docs/phase-3/README.md. All four brief phases now signed off; go-live still depends on staging, pen test, provider sandboxes, counsel and tax advice.
