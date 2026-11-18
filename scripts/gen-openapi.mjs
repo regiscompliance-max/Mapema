@@ -30,6 +30,10 @@ const TAGS = {
   regulatory: ['Regulatory and lender reports', 'Phase 2: month-end snapshots (append-only, hashed), CBK monthly return and CRB file generators (DRAFT, assumed layout until the official formats are loaded), reproducible lender pack (CSV + PDF), template mapping layer (maker-checker).'],
   dashboards: ['Dashboards', 'Phase 2: staff portfolio/utilisation/ageing/NPL dashboard; buyer and supplier dashboards scoped to their organisation.'],
   integrations: ['Integrations', 'Phase 2: accounting (Xero/QuickBooks adapter) daily journal push, idempotent; CRM (HubSpot adapter) buyer-lead import from the site book-a-call form, consent respected.'],
+  erp: ['ERP connectors', 'Phase 3: per-buyer ERP connections (Odoo + CSV/SFTP drop complete; SAP, Sage, Dynamics mock-backed with assumed fields), versioned field mapping (maker-checker), idempotent imports through the same invoice checks, error mapping, pause after repeated auth failures.'],
+  funding: ['Funding sources', 'Phase 3: funding sources with eligibility rules and covenants (CEO approves), tagging at approval/release kept consistent with Fineract (fund + datatable), re-tagging (maker-checker), utilisation, consistency check.'],
+  mpesa: ['M-Pesa B2C', 'Phase 3: Daraja B2C payouts (mock/sandbox only), configurable cap (CEO approves), verified wallets, result/timeout callbacks with a path token, status queries, never auto-resent.'],
+  bulk: ['Bulk tools', 'Phase 3: buyer bulk confirmation, supplier bulk quotes, ops payout batches with batch- and item-level maker-checker, per-item limit checks and a full audit trail.'],
   dev: ['Development only', 'Mounted only when DEV_IDP_ENABLED=true and APP_ENV is development or test. Never in staging or production.'],
 };
 const SUMMARIES = {
@@ -43,6 +47,11 @@ const SUMMARIES = {
   'POST /v1/admin/lending/enable': 'Propose switching lending on with the CBK licence number (second-person approval)',
   'POST /v1/admin/lending/disable': 'Switch lending off immediately',
   'GET /v1/audit/verify': 'Verify the audit log hash chain',
+  'POST /v1/erp/connections': 'Create an ERP connection (ops); the default field mapping is proposed for a second ops user',
+  'POST /v1/erp/connections/{id}/run': 'Run an import now (idempotent; same checks as manual invoices)',
+  'POST /v1/payout-batches/{id}/approve': 'Approve a payout batch (a different ops user, step-up); items release one by one with all checks',
+  'POST /v1/webhooks/mpesa/b2c/result/{token}': 'Daraja B2C ResultURL callback (path token; idempotent)',
+  'POST /v1/webhooks/mpesa/b2c/timeout/{token}': 'Daraja B2C QueueTimeOutURL callback (status query, never a resend)',
 };
 
 const ops = [];
@@ -141,7 +150,7 @@ for (const o of ops.sort((a, b) => a.path.localeCompare(b.path))) {
 const used = [...new Set(ops.map((o) => o.mod))].filter((m) => TAGS[m]);
 const doc = {
   openapi: '3.1.0',
-  info: { title: 'Mapema Platform API (as implemented, Phase 2)', version: '1.2.0-phase2',
+  info: { title: 'Mapema Platform API (as implemented, Phase 3)', version: '1.3.0-phase3',
     description: 'Generated from the NestJS controllers by scripts/gen-openapi.mjs. Money: KES integer cents (strings in JSON). Errors: RFC 9457 problem+json; `title` is a stable error code. All users need MFA; money movements need step-up and maker-checker. Phase 0 design contract: openapi/phase-0-design.yaml (differences are listed in docs/phase-1/README).',
     contact: { name: 'Mapema engineering' }, license: { name: 'Proprietary - Mapema Limited, all rights reserved', identifier: 'LicenseRef-Mapema-Proprietary' } },
   servers: [{ url: 'https://api.staging.mapema.example', description: 'Staging placeholder (not deployed in Phase 1); locally http://localhost:4000' }],

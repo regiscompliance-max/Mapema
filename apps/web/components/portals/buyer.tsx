@@ -8,6 +8,7 @@ import { Complaints } from './supplier';
 import { kesFromCents } from '@/lib/money';
 import { Documents, Shortfalls } from '../shared';
 import { BuyerDashboard } from './phase2';
+import { BulkConfirm, ErpConnections } from './phase3';
 
 export function BuyerPortal({ roles, orgId }: { roles: string[]; orgId: string }) {
   const t = useT();
@@ -15,12 +16,14 @@ export function BuyerPortal({ roles, orgId }: { roles: string[]; orgId: string }
   const checker = roles.some((r) => r === 'buyer_checker' || r === 'buyer_admin');
   return (
     <div>
-      <Tabs active={tab} onChange={setTab} tabs={[{ id: 'overview', label: 'Overview' }, { id: 'invoices', label: t('buyer.title') }, { id: 'new', label: t('buyer.new') }, ...(checker ? [{ id: 'confirm', label: 'Confirm & sign ILU' }] : []),
+      <Tabs active={tab} onChange={setTab} tabs={[{ id: 'overview', label: 'Overview' }, { id: 'invoices', label: t('buyer.title') }, { id: 'new', label: t('buyer.new') }, ...(checker ? [{ id: 'confirm', label: 'Confirm & sign ILU' }, { id: 'bulk', label: t('p3.tab.bulk_confirm') }] : []), { id: 'erp', label: t('p3.tab.erp') },
         { id: 'calendar', label: t('buyer.calendar') }, { id: 'programme', label: 'Programme' }, { id: 'documents', label: 'Documents' }, { id: 'suppliers', label: t('buyer.invite') }, ...(roles.includes('buyer_admin') ? [{ id: 'users', label: 'Users' }] : []), { id: 'help', label: t('footer.complaints') }]} />
       {tab === 'overview' && <BuyerDashboard orgId={orgId} />}
       {tab === 'invoices' && <AllInvoices />}
       {tab === 'new' && <NewInvoice />}
       {tab === 'confirm' && <Confirm />}
+      {tab === 'bulk' && <BulkConfirm />}
+      {tab === 'erp' && <ErpConnections canOps={false} canPropose={roles.includes('buyer_admin')} buyerId={orgId} />}
       {tab === 'calendar' && <><Calendar /><div className="mt-6"><Shortfalls /></div></>}
       {tab === 'programme' && <Programme />}
       {tab === 'documents' && <div className="space-y-8">

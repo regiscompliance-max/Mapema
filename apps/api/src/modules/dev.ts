@@ -107,7 +107,7 @@ export class DevController {
   /** Pushes fixture records into a mock-mode ERP connection (seed demo). */
   @Post('dev/erp/:id/push')
   erpPush(@Param('id') id: string, @Body() b: unknown) {
-    const { records } = z.object({ records: z.array(z.object({ externalId: z.string(), version: z.string(), fields: z.record(z.string(), z.unknown()) })).min(1).max(500) }).parse(b);
+    const { records } = z.object({ records: z.array(z.object({ externalId: z.string(), version: z.string(), data: z.record(z.string(), z.unknown()) })).min(1).max(500) }).parse(b);
     return this.erp.devPush(id, records as any);
   }
 

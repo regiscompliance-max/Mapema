@@ -6,6 +6,7 @@ import { useT } from '../lang';
 import { Msg, StatusPill, Table, Tabs, useAction, useGet } from '../ui';
 import { Field } from '../shared';
 import { CollectionsBook, ReconBreaks, Reports, StaffOverview } from './phase2';
+import { ErpConnections, FundingSources, MpesaPanel, PayoutBatches } from './phase3';
 import { CreditFile, DsrPanel, LimitsFloat, ReviewTasks, Shortfalls, StaffAdmin, WriteOffs } from './staff-extra';
 
 export function StaffPortal({ roles }: { roles: string[] }) {
@@ -15,6 +16,8 @@ export function StaffPortal({ roles }: { roles: string[] }) {
   const tabs = [{ id: 'dash', label: t('staff.dashboard') }, { id: 'approvals', label: t('staff.approvals') }, { id: 'advances', label: t('staff.advances') },
     ...(has('ops', 'ceo') ? [{ id: 'payments', label: t('staff.payments') }, { id: 'recon', label: t('staff.recon') }] : []), ...(has('ops', 'ceo', 'credit', 'compliance') ? [{ id: 'collections', label: 'Collections' }] : []),
     ...(has('compliance', 'ceo', 'credit') ? [{ id: 'reports', label: 'Reports' }] : []), { id: 'orgs', label: t('staff.orgs') },
+    ...(has('ops', 'ceo') ? [{ id: 'batches', label: t('p3.tab.batches') }, { id: 'mpesa', label: t('p3.tab.mpesa') }] : []), ...(has('ops', 'ceo', 'admin', 'credit', 'compliance') ? [{ id: 'erp', label: t('p3.tab.erp') }] : []),
+    ...(has('ceo', 'credit', 'ops', 'admin', 'compliance') ? [{ id: 'funding', label: t('p3.tab.funding') }] : []),
     ...(has('credit', 'ceo', 'admin') ? [{ id: 'reviews', label: 'Review tasks' }] : []), ...(has('admin', 'credit') ? [{ id: 'writeoffs', label: 'Write-offs' }] : []),
     ...(has('compliance') ? [{ id: 'compliance', label: t('staff.compliance') }] : []), ...(has('admin', 'ceo', 'compliance') ? [{ id: 'settings', label: t('staff.settings') }] : []),
     ...(has('admin', 'ceo', 'compliance') ? [{ id: 'people', label: 'Staff' }] : [])];
@@ -29,6 +32,10 @@ export function StaffPortal({ roles }: { roles: string[] }) {
       {tab === 'collections' && <CollectionsBook canCredit={has('credit')} canOps={has('ops')} />}
       {tab === 'reports' && <Reports canGenerate={has('compliance', 'ceo')} />}
       {tab === 'orgs' && <Orgs canCredit={has('credit')} />}
+      {tab === 'batches' && <PayoutBatches canOps={has('ops')} />}
+      {tab === 'mpesa' && <MpesaPanel canOps={has('ops')} canPropose={has('admin', 'ceo')} />}
+      {tab === 'erp' && <ErpConnections canOps={has('ops')} canPropose={has('ops')} />}
+      {tab === 'funding' && <FundingSources canPropose={has('admin', 'ceo')} canRetag={has('credit')} />}
       {tab === 'reviews' && <ReviewTasks canCredit={has('credit')} />}
       {tab === 'writeoffs' && <WriteOffs />}
       {tab === 'compliance' && <Compliance />}

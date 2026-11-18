@@ -56,3 +56,24 @@ Phase 0 decisions D-01 to D-18 are in `phase-0/README.md` (delivered in `mapema-
 ## D-49 Phase 2 sign-off (18 Nov 2026, 06:02 GMT)
 
 CEO approved Phase 2 and its defaults Q-A to Q-J as recorded in docs/phase-2/README.md. CBK/CRB outputs stay DRAFT until official formats arrive.
+
+### Phase 3 decisions (18 Nov 2026)
+
+**[Product Manager + Tech Lead + Architect + Compliance]** Recorded 18 Nov 2026, about 06:50 GMT (London). Deng's "Next" after D-49 starts Phase 3 "Growth". These are working defaults; each can be changed by Deng.
+
+| ID | Decision |
+| --- | --- |
+| D-50 | ERP connectors are stateless; the platform owns the cursor and an item ledger (one row per connection + ERP record, ever), so connectors never decide idempotency. A record that changes in the ERP after import is flagged `changed_after_import` and never applied; corrections go through the normal invoice flows. |
+| D-51 | Every ERP connection gets its own inactive integration user as the uploader, so the buyer's human checker is always a different person (four eyes) and the ILU is still signed by a person. |
+| D-52 | ERP secrets come only from env vars named `ERP_SECRET_*` (secret manager in staging/production); the database stores the variable name, never the key. |
+| D-53 | Odoo and CSV/SFTP are complete; SAP S/4HANA, Sage Business Cloud and Dynamics 365 BC are built to the vendors' documented shapes but their field names, approval states and auth are assumptions until a real tenant is tested (Q-K). No ERP write-back. |
+| D-54 | CSV/SFTP is a drop folder (`ERP_DROP_ROOT/<connection>/incoming`) written by an SFTP host; the app never pulls from a remote SFTP server. Files are de-duplicated by SHA-256. |
+| D-55 | Field mappings are JSON with a fixed set of transforms, versioned; changes proposed by a buyer admin or ops apply only after a different ops user approves (`erp_mapping_change`). |
+| D-56 | The payout rail is chosen at credit approval: M-Pesa B2C if the supplier has a call-back-verified wallet, the amount is ≤ the cap and in whole shillings; otherwise bank. |
+| D-57 | M-Pesa cap default KES 150,000 (`mpesa_payout_cap_cents`), changed only with CEO approval, never above Daraja's KES 250,000. |
+| D-58 | An M-Pesa advance stays `released` until Safaricom's result arrives. Failure undoes the Fineract disbursal; timeout or no result → status query; still unknown → ops task. **Nothing is ever resent automatically.** |
+| D-59 | Daraja does not sign callbacks, so result/timeout URLs carry a random path token compared in constant time (S-12: mask it in proxy logs). |
+| D-60 | Payout batches: maker builds (≤ 100 approved advances), a different ops user approves with step-up and may drop items; items release one by one through the normal release (limits accumulate), and one failure never stops the others. Limit failures therefore show per item. |
+| D-61 | Funding: each source is a Fineract fund, set on the loan at origination (`fundId`; Fineract does not allow changing it on an active loan). The current tag lives in the loan datatable `mapema_funding_tag`; re-tags update it after commit and a consistency check compares platform and Fineract. |
+| D-62 | Funding sources and re-tags are approved by the CEO. At release the system validates the source credit named (eligibility, headroom, covenants pro forma) or auto-picks the first eligible source by priority. With no sources configured, advances stay untagged (Phase 2 behaviour). |
+| D-63 | The per-funder lender pack uses the tag history as at month end, recomputes the loan-level summary for that funder's loans, keeps platform-wide lines as they are, and is reproducible byte for byte. |

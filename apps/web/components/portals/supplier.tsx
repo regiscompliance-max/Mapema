@@ -6,19 +6,21 @@ import { kesFromCents, bps, parseKesInput } from '@/lib/money';
 import { Consents, Documents, Field, MyData, Shortfalls, TermsExplained } from '../shared';
 import { useT } from '../lang';
 import { Msg, StatusPill, Table, Tabs, useAction, useGet } from '../ui';
+import { BulkQuote, MpesaWallet } from './phase3';
 
 export function SupplierPortal({ orgId, roles = [] }: { orgId: string; roles?: string[] }) {
   const t = useT();
   const [tab, setTab] = useState('overview');
   return (
     <div>
-      <Tabs active={tab} onChange={setTab} tabs={[{ id: 'overview', label: 'Overview' }, { id: 'invoices', label: t('supplier.title') }, { id: 'submit', label: 'Add invoice' }, { id: 'advances', label: t('supplier.advances') }, { id: 'account', label: 'Account' },
+      <Tabs active={tab} onChange={setTab} tabs={[{ id: 'overview', label: 'Overview' }, { id: 'invoices', label: t('supplier.title') }, { id: 'submit', label: 'Add invoice' }, { id: 'advances', label: t('supplier.advances') }, { id: 'bulk', label: t('p3.tab.bulk_quote') }, { id: 'account', label: 'Account' },
         { id: 'privacy', label: 'Privacy' }, { id: 'help', label: t('footer.complaints') }]} />
       {tab === 'overview' && <SupplierDashboard orgId={orgId} />}
       {tab === 'invoices' && <Invoices />}
       {tab === 'submit' && <SubmitInvoice orgId={orgId} />}
       {tab === 'advances' && <><Advances /><div className="mt-6"><Shortfalls canClose={roles.includes('supplier_admin')} /></div></>}
-      {tab === 'account' && <Account orgId={orgId} />}
+      {tab === 'bulk' && <BulkQuote />}
+      {tab === 'account' && <><Account orgId={orgId} /><div className="mt-6"><MpesaWallet orgId={orgId} canEdit={roles.includes('supplier_admin')} /></div></>}
       {tab === 'privacy' && <div className="space-y-8"><Consents orgId={orgId} /><MyData /></div>}
       {tab === 'help' && <Complaints />}
     </div>

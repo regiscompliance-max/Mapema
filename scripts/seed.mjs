@@ -13,6 +13,7 @@
  *     KES 1,000,000 invoice due in 48 days. All names, PINs and numbers are fictitious.
  *
  *  5. Phase 2: with SEED_DEMO_MONTH=YYYY-MM, a full month of activity instead (see seedDemoMonth).
+ *  6. Phase 3: with SEED_DEMO_GROWTH=true, the demo world plus ERP, funding sources, M-Pesa and a payout batch (see seedDemoGrowth).
  *
  * Usage: DATABASE_ADMIN_URL=... APP_DB_LOGIN_PASSWORD=... [SEED_API_URL=http://localhost:4000] node scripts/seed.mjs
  */
@@ -196,11 +197,74 @@ export async function seedDemoMonth(base, month) {
   } finally { await clock(null); }
 }
 
+/**
+ * [QA + Ops] Phase 3 demo (SEED_DEMO_GROWTH=true): demo world plus
+ *   - funding sources EQUITY (priority 100) and FAC-A (KES 5m debt facility, FMCG, <= 60 days, buyer concentration <= 60%), CEO approved
+ *   - an Odoo connection for Acme in MOCK mode (no remote host) with 3 vendor bills pushed: 2 import, 1 is refused
+ *     (unknown supplier PIN) - the field mapping is approved by a second ops user
+ *   - a verified M-Pesa wallet for Jua Kali, the M-Pesa float topped up, one KES 100,000 invoice paid by M-Pesa (callback applied)
+ *   - two ERP invoices confirmed in bulk by the checker, quoted and accepted in bulk by the supplier, approved by credit,
+ *     and put in a payout batch waiting for the second ops user
+ * Mock adapters only (ADAPTER_MODE_ERP / ADAPTER_MODE_MPESA = mock). All names, PINs and numbers are fictitious.
+ */
+export async function seedDemoGrowth(base) {
+  const w = await seedDemoWorld(base, { floatCents: '5000000000', supplierLimitCents: '500000000' });
+  if (!w) return;
+  const { a, S, approve } = w;
+  const today = todayEAT();
+  const sup = 'finance@juakali.test';
+  await a.post('/dev/bank/fund', undefined, { amountCents: '5000000000', reference: 'EQ-DEMO-0001', valueDate: today });
+  await a.post('/funding', S('ceo'), { amountCents: '5000000000', source: 'DEMO founder equity', reference: 'EQ-DEMO-0001', valueDate: today });
+  await approve((await a.post('/reconciliation/baseline', S('ops'), { note: 'DEMO go-live opening balances' })).id, 'ops2');
+  await approve((await a.post('/funding-sources', S('admin'), { code: 'EQUITY', name: 'DEMO founder equity', type: 'equity', limitCents: null, priority: 100, eligibility: {}, covenants: {}, reason: 'DEMO default source' })).id);
+  await approve((await a.post('/funding-sources', S('admin'), { code: 'FAC-A', name: 'DEMO debt facility A', type: 'debt_facility', limitCents: '500000000', priority: 10,
+    eligibility: { sectorCodes: ['FMCG'], maxTenorDays: 60, maxAdvanceCents: '200000000', requireEtimsValid: true }, covenants: { maxBuyerConcentrationBps: 6000, maxNplRatioBps: 500 }, reason: 'DEMO facility A' })).id);
+  console.log('funding sources EQUITY + FAC-A (KES 5m) approved by the CEO');
+
+  const c = await a.post('/erp/connections', S('ops'), { buyerId: w.buyerId, kind: 'odoo', name: 'Acme Odoo 17 (DEMO mock)', config: { baseUrl: 'https://odoo.acme.test', database: 'acme', username: 'api@acme.test' }, secretEnv: 'ERP_SECRET_DEMO_ODOO' });
+  await approve(c.mapping.approvalId, 'ops2');
+  const bill = (id, ref, kes, pin, due) => ({ externalId: String(id), version: `${today} 08:00:0${id}|${id}`, data: { id, ref, move_type: 'in_invoice', state: 'posted', partner_vat: pin, amount_total: kes, currency: 'KES',
+    invoice_date: addDays(today, -2), invoice_date_due: addDays(today, due), x_etims_cu_invoice_no: `KRACUODOODEMO${id}` } });
+  await a.post(`/dev/erp/${c.id}/push`, undefined, { records: [bill(1, 'ODOO-DEMO-1', 600000, 'P051111111B', 40), bill(2, 'ODOO-DEMO-2', 400000, 'P051111111B', 55), bill(3, 'ODOO-DEMO-3', 90000, 'P059999999Z', 30)] });
+  const run = await a.post(`/erp/connections/${c.id}/run`, 'ap@acme.test');
+  console.log(`ERP import: fetched ${run.fetched}, created ${run.created}, errors ${run.errors}`);
+
+  // M-Pesa wallet + float, one small advance paid by M-Pesa
+  const wal = await a.post(`/organisations/${w.supplierId}/mpesa-wallet`, sup, { msisdn: '254712345678', accountName: 'Peter Kamau' }, 'sms');
+  await approve((await a.post(`/bank-accounts/${wal.id}/verify`, S('ops'), { callBackNote: 'DEMO call-back: Safaricom line confirmed by the director' })).id, 'ops2');
+  await a.post('/dev/mpesa/fund', undefined, { amountCents: '100000000', reference: 'MPFLOAT-DEMO-1', valueDate: today });
+  await a.post('/funding', S('ceo'), { amountCents: '100000000', source: 'DEMO M-Pesa float top-up', reference: 'MPFLOAT-DEMO-1', valueDate: today });
+  const small = await a.post('/invoices', 'ap@acme.test', { supplierKraPin: 'P051111111B', invoiceNumber: 'DEMO-INV-MP1', amountCents: '12500000', currency: 'KES', issueDate: addDays(today, -3), dueDate: addDays(today, 30), etimsCuInvoiceNo: 'KRACUDEMOMP1' });
+  await a.post(`/invoices/${small.id}/decision`, 'checker@acme.test', { decision: 'approve' });
+  const sc = await a.post('/confirmations', 'checker@acme.test', { invoiceIds: [small.id] });
+  await a.post(`/dev/esign/${sc.envelopeId}/complete`);
+  const q = await a.post(`/invoices/${small.id}/quote`, sup, {}, 'sms');
+  const acc = await a.post('/advances', sup, { disclosureIds: [q.disclosureId], acceptTerms: true }, 'sms');
+  const mpAdv = acc.advances[0].advanceId;
+  await a.post(`/advances/${mpAdv}/decision`, S('credit'), { decision: 'approve', reason: 'DEMO checks green' });
+  await a.post(`/advances/${mpAdv}/release`, S('ops'));
+  const mp = (await a.get('/mpesa/payouts', S('ops')))[0];
+  await a.post('/dev/mpesa/complete', undefined, { conversationId: mp.bank_ref, outcome: 'success' });
+  console.log('M-Pesa: wallet verified, KES 100,000 advance paid and confirmed by the result callback');
+
+  // bulk: checker confirms the ERP invoices, supplier quotes + accepts in bulk, credit approves, ops builds a batch
+  const pending = (await a.get('/invoices?status=awaiting_confirmation', 'checker@acme.test')).map((i) => i.id);
+  await a.post('/invoices/bulk-decision', 'checker@acme.test', { invoiceIds: pending, decision: 'approve' });
+  const bc = await a.post('/confirmations', 'checker@acme.test', { invoiceIds: pending });
+  await a.post(`/dev/esign/${bc.envelopeId}/complete`);
+  const bq = await a.post('/invoices/bulk-quote', sup, { invoiceIds: pending }, 'sms');
+  const ba = await a.post('/advances', sup, { disclosureIds: bq.results.filter((r) => r.status === 'ok').map((r) => r.quote.disclosureId), acceptTerms: true }, 'sms');
+  for (const x of ba.advances) await a.post(`/advances/${x.advanceId}/decision`, S('credit'), { decision: 'approve', reason: 'DEMO checks green' });
+  await a.post('/payout-batches', S('ops'), { advanceIds: ba.advances.map((x) => x.advanceId), note: 'DEMO ERP batch' });
+  await a.post('/dev/jobs/run');
+  console.log(`bulk: ${pending.length} ERP invoices confirmed, quoted and accepted in bulk; payout batch waiting for ops2@mapema.test`);
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   if (env.APP_ENV === 'production') { console.error('seed refuses to run with APP_ENV=production'); process.exit(1); }
   const adminUrl = env.DATABASE_ADMIN_URL;
   if (!adminUrl) { console.error('DATABASE_ADMIN_URL is required'); process.exit(1); }
   seedDatabase(adminUrl, env.APP_DB_LOGIN_PASSWORD)
-    .then(() => (!env.SEED_API_URL ? console.log('SEED_API_URL not set - demo world skipped') : env.SEED_DEMO_MONTH ? seedDemoMonth(env.SEED_API_URL, env.SEED_DEMO_MONTH) : seedDemoWorld(env.SEED_API_URL)))
+    .then(() => (!env.SEED_API_URL ? console.log('SEED_API_URL not set - demo world skipped') : env.SEED_DEMO_GROWTH === 'true' ? seedDemoGrowth(env.SEED_API_URL) : env.SEED_DEMO_MONTH ? seedDemoMonth(env.SEED_API_URL, env.SEED_DEMO_MONTH) : seedDemoWorld(env.SEED_API_URL)))
     .then(() => console.log('seed complete'), (e) => { console.error(e.message); process.exit(1); });
 }

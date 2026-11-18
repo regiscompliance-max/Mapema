@@ -22,7 +22,7 @@
 
 > **Architect:** Connectors are stateless per connection; the platform owns the cursor and the item ledger, so connectors never decide idempotency. Mapping is a pure function (`mapErpRecord`) unit-tested without HTTP. The Odoo connector uses JSON-RPC (the same service model as XML-RPC). No ERP write-back in this phase.
 >
-> **Compliance:** Pulling invoices is processing of the buyer's and suppliers' data: the buyer agreement must authorise it, and only the mapped fields are stored (raw ERP payloads are not kept, only their hash). Credentials stay in the secret store. ERP data sharing needs a clause in the programme agreement (counsel).
+> **Compliance:** Pulling invoices is processing of the buyer's and suppliers' data: the buyer agreement must authorise it, and only the mapped fields are stored (raw ERP payloads are not kept, only the external id and version). Credentials stay in the secret store. ERP data sharing needs a clause in the programme agreement (counsel).
 
 ## Epic FUND: multi-lender funding tags
 
@@ -34,7 +34,7 @@
 | FUND-04 | As **finance**, I want the tag consistent in Fineract. | 1. Each source maps to a Fineract **fund** (created on demand); loans are booked with `fundId`. 2. Because Fineract does not allow changing `fundId` on an active loan (verified on 1.16.1), the **current** tag is kept in a loan datatable `mapema_funding_tag`, updated on re-tag. 3. A consistency check lists any advance whose platform tag differs from Fineract. | TC-P3U-FUND-03 (real Fineract), TC-P3-FUND-03 | ✅ |
 | FUND-05 | As **the CEO**, I want re-tagging under maker-checker. | Proposed by credit or ops with a reason; approved by the CEO (`funding_retag`); target must be eligible with headroom; history and audit kept; Fineract datatable updated after commit. | TC-P3-FUND-03 | ✅ |
 | FUND-06 | As **a funder**, I want utilisation and covenant checks per facility. | Outstanding principal, limit, headroom, used %; covenants (max single-buyer concentration of the facility, max NPL ratio, max 30+ DPD ratio) with actual vs limit; a breached covenant blocks new tags to that source and shows on the funding screen. | TC-P3U-FUND-02, TC-P3-FUND-04 | ✅ |
-| FUND-07 | As **a funder**, I want my own lender pack. | `generate {kind:'lender_pack', fundingSource}` filters the month-end snapshot to loans tagged to that source at month end (tag history), recomputes the summary, and adds the facility utilisation and covenant section; reproducible byte for byte. | TC-P3-FUND-05 | ✅ |
+| FUND-07 | As **a funder**, I want my own lender pack. | `generate {kind:'lender_pack', fundingSource}` filters the month-end snapshot to loans tagged to that source at month end (tag history), recomputes the loan-level summary (portfolio, ageing, NPL, flows) and names the source in the file names and PDF title; reproducible byte for byte. Platform-wide lines (float, concentration vs float, complaints) stay platform-wide. A facility utilisation/covenant section inside the pack is **not** built yet (shown on the Funding screen instead). | TC-P3-FUND-05 | ✅ (pack covenant section ❌) |
 
 > **Architect:** Eligibility, utilisation and covenants are pure BigInt functions in `@mapema/pricing` (`funding.ts`). Fineract fund = funder at disbursement (immutable); datatable = current funder.
 >
@@ -44,7 +44,7 @@
 
 | ID | Story | Acceptance criteria | Tests | Status |
 |---|---|---|---|---|
-| MP-01 | As **ops**, I want small supplier payouts sent by M-Pesa B2C. | 1. `MpesaAdapter` (mock, Daraja sandbox): OAuth client credentials, `POST /mpesa/b2c/v3/paymentrequest` (`BusinessPayment`), transaction status query, balance and statement. 2. Rail chosen at approval: M-Pesa if the supplier has a **verified** M-Pesa number (same call-back verification as bank accounts), the amount is ≤ the cap and in whole shillings; otherwise bank. | TC-P3U-MP-01..03, TC-P3-MP-01 | ✅ (🟡 Daraja account: Q-M) |
+| MP-01 | As **ops**, I want small supplier payouts sent by M-Pesa B2C. | 1. `MpesaAdapter` (mock, Daraja sandbox): OAuth client credentials, `POST /mpesa/b2c/v3/paymentrequest` (`BusinessPayment`), transaction status query; balance and statement in mock mode only (Daraja's balance query is asynchronous and has no statement API, so sandbox reconciliation falls back to the bank side - Q-M). 2. Rail chosen at approval: M-Pesa if the supplier has a **verified** M-Pesa number (same call-back verification as bank accounts), the amount is ≤ the cap and in whole shillings; otherwise bank. | TC-P3U-MP-01..03, TC-P3-MP-01 | ✅ (🟡 Daraja account: Q-M) |
 | MP-02 | As **the CEO**, I want a configurable cap. | Setting `mpesa_payout_cap_cents` (default KES 150,000), changed only through maker-checker (`mpesa_cap_change`, CEO approves). Safaricom's own per-transaction limit still applies. | TC-P3-MP-02 | ✅ |
 | MP-03 | As **compliance**, I want the same controls as bank payouts. | Credit approves, a different ops user releases with step-up; all release checks (incl. concentration limits and funding source) run at release. | TC-P3-MP-01 | ✅ |
 | MP-04 | As **ops**, I want callbacks and timeouts handled. | 1. Result callback (`/webhooks/mpesa/b2c/result/:token`) success → payout confirmed with the M-Pesa receipt; failure → ledger disbursal undone, advance `release_failed`, supplier told. 2. Timeout callback or no result within `MPESA_RESULT_TIMEOUT_MINUTES` → status query; still unknown → `unknown` for ops, **never auto-resent**. 3. Duplicate callbacks are ignored. 4. Receiver name returned by M-Pesa is compared with the supplier; a mismatch raises an AML flag. | TC-P3-MP-03, TC-P3-MP-04 | ✅ |
@@ -72,4 +72,5 @@
 - Remote SFTP pull (the app reads a drop folder served by an SFTP host).
 - ERP write-back (marking bills as financed in the ERP).
 - Lender-user portal scoped to one funder (packs are generated by staff).
+- A facility utilisation / covenant section inside the per-funder lender pack (on the Funding screen only).
 - Treasury transfers between the bank account and the M-Pesa working account (recorded as funding movements for now).
