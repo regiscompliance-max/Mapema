@@ -19,7 +19,7 @@ Stories and tests were committed red before the code: commit `2adc56d` ("Phase 3
 | `npm run test:e2e:fineract` | ✅ 131 passed, 1 skipped (Phase 2's mock-only TC-P2-COL-04 hook); all 22 Phase 3 tests pass with titles `[ledger=real Fineract]` |
 | `npm test -w @mapema/worker` | ✅ 4 / 4 (TC-P3-WRK-01 new) |
 | `npm test -w @mapema/web` | ✅ 90 / 90 (28 new: TC-P3W-01..04) |
-| `scripts/phase3-shots.mjs` on the growth demo | ✅ 31 / 31 checks; axe 0 serious/critical on every screen checked (18 scans); 0 console errors |
+| `scripts/phase3-shots.mjs` on the growth demo | ✅ 31 / 31 checks; axe 0 serious/critical on every screen checked (16 scans); 0 console errors |
 | `npm run lint:openapi` | ✅ valid (159 operations, 144 paths) |
 
 Phase 2 baseline is intact: every Phase 1/1b/2 test still passes on both ledgers.
