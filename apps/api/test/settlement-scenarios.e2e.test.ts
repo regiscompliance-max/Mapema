@@ -166,7 +166,7 @@ describe(`buyer underpayment shortfall owed to the supplier (D-22) [ledger=${REA
 });
 
 describe('collections, disputes, complaints, DSR', () => {
-  it('TC-OPS-01 late ladder D1/D7/D14/D30 then recourse by credit (step-up)', async () => {
+  it('TC-OPS-01 late ladder D1/D7/D14/D30 then recourse by credit, approved by a second credit user (step-up)', async () => {
     const start = addDays(D0, 330);
     const a = await newFunded('INV-L-008', start);
     h.clock.set(AT(addDays(a.due, 31)));
@@ -175,7 +175,10 @@ describe('collections, disputes, complaints, DSR', () => {
     expect(await status(a.advanceId)).toBe('late');
     const again = await w.ops.post('/ops/late-ladder/run');
     expect(again.actions.filter((x: any) => x.advanceId === a.advanceId)).toHaveLength(0); // idempotent
-    await w.credit.post(`/advances/${a.advanceId}/recourse`, { reason: 'Buyer insolvent; recourse per master agreement' });
+    // Phase 2 COL-04 (D-41): recourse is now maker-checker - credit proposes, a second credit user approves
+    const p = await w.credit.post(`/advances/${a.advanceId}/recourse`, { reason: 'Buyer insolvent; recourse per master agreement' });
+    expect(await status(a.advanceId)).toBe('late');
+    await w.approve(p.id, w.credit2);
     expect(await status(a.advanceId)).toBe('recourse');
     // late buyer payment still settles in CBK order; no late charges in Phase 1
     await pay(100_000_000n, addDays(a.due, 32), 'BR-L-008', 'INV-L-008');

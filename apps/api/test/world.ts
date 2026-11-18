@@ -107,6 +107,6 @@ export async function fund(h: Harness, w: World, invoiceId: string) {
 }
 
 export async function seedFunding(h: Harness, w: World, cents: bigint, ref = 'EQ-0001') {
-  await h.http.post('/v1/dev/bank/fund').send({ amountCents: String(cents) }).expect(201);
+  await h.http.post('/v1/dev/bank/fund').send({ amountCents: String(cents), reference: ref, valueDate: WORKED.quoteDate }).expect(201); // statement line carries the funding reference (REC-02 matching)
   await w.ceo.post('/funding', { amountCents: String(cents), source: 'Founder equity', reference: ref, valueDate: WORKED.quoteDate });
 }
