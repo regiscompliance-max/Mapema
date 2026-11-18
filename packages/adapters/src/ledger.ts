@@ -27,6 +27,8 @@ export interface LedgerLoanRequest {
   disbursementDate: string; // ISO date (EAT)
   dueDate: string;
   verificationFeeCents: Cents;
+  /** Phase 3: Fineract fund (funding source) recorded at origination; immutable once the loan is active */
+  fundId?: number;
 }
 
 export interface LedgerLoanState {
@@ -66,5 +68,10 @@ export interface LedgerAdapter {
   writeOff(ctx: AdapterContext, loanId: number, date: string, note: string): Promise<void>;
   /** Waive interest (Phase 2 COL-03 in duplum cap). Never touches principal. Idempotent per externalId. */
   waiveInterest(ctx: AdapterContext, loanId: number, amountCents: Cents, date: string, note: string, externalId?: string): Promise<string>;
+  /** Phase 3 FUND-03: a Fineract fund per funding source (idempotent by code). */
+  ensureFund(code: string, name: string): Promise<number>;
+  /** Phase 3 FUND-03: the CURRENT funding tag on a loan (re-taggable; the origination fund is not). */
+  setFundingTag(loanId: number, code: string, date: string): Promise<void>;
+  getFundingTag(loanId: number): Promise<{ fundId: number | null; tagCode: string | null }>;
   health(): Promise<HealthCheck>;
 }

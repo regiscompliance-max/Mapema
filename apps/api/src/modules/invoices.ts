@@ -65,7 +65,7 @@ export class InvoicesService implements OnModuleInit {
   }
 
   /** Validate and insert one invoice (shared by single upload, CSV and supplier submission). */
-  private async insertOne(c: Q, u: AuthUser, buyerId: string, supplierId: string | null, inv: NewInvoice, source: string) {
+  async insertOne(c: Q, u: AuthUser, buyerId: string, supplierId: string | null, inv: NewInvoice, source: string) {
     const today = this.clock.today();
     const min = await this.settings.invoiceMinimum(c);
     if (inv.amountCents < min) throw unprocessable('BELOW_MINIMUM_INVOICE', `Invoices must be at least ${formatKes(min)}`);

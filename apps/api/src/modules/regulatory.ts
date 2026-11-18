@@ -19,6 +19,7 @@ import { zText, zUuid } from '../common/http';
 import { AuthUser, CurrentUser, Roles } from '../auth/auth';
 import { ApprovalsService } from './approvals';
 import { SettingsService } from './admin';
+import { FundingService } from './funding';
 import { canonical, lenderPackLines, pdfDocument, renderFileCsv, renderReturnCsv, renderTapeCsv, sha256, TemplateMeta } from '../reporting/render';
 import { DEFAULT_TEMPLATES, FileMapping, PackMapping, ReturnMapping } from '../reporting/templates';
 
@@ -26,6 +27,35 @@ const READERS = ['compliance', 'ceo', 'credit', 'auditor'] as const;
 const lastDay = (period: string) => { const [y, m] = period.split('-').map(Number); return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10); };
 const s = (b: bigint) => b.toString();
 const bpsOf = (part: bigint, whole: bigint) => (whole > 0n ? Number((part * 10000n * 2n + whole) / (whole * 2n)) : 0);
+
+/**
+ * Per-funder view of a month-end snapshot (Phase 3 FUND-05): only that funder's loans, and the loan-level
+ * aggregates (portfolio, ageing, status, flows, NPL ratio) recomputed from them. Platform-wide items
+ * (float, concentration vs float, complaints, recourse, reconciliation) stay as they are: they describe the
+ * lender, not the facility, and the pack title names the funding source. Integer cents throughout.
+ */
+function funderView(data: any, keep: (l: any) => boolean) {
+  const loans = data.loans.filter(keep);
+  const live = loans.filter((l: any) => BigInt(l.outstandingPrincipalCents) > 0n);
+  const tot = (xs: any[], k: string) => xs.reduce((t: bigint, l: any) => t + BigInt(l[k]), 0n);
+  const sumM = (k: string) => s(loans.reduce((t: bigint, l: any) => t + BigInt(l.repaidInMonth[k]), 0n));
+  const ageing = Object.fromEntries(AGEING_BUCKETS.map((b) => { const xs = live.filter((l: any) => l.bucket === b); return [b, { count: xs.length, principalCents: s(tot(xs, 'outstandingPrincipalCents')) }]; }));
+  const statusAtMonthEnd = Object.fromEntries(['current', 'late', 'recourse', 'non_performing'].map((st) => { const xs = live.filter((l: any) => l.statusAtMonthEnd === st); return [st, { count: xs.length, principalCents: s(tot(xs, 'outstandingPrincipalCents')) }]; }));
+  const outstanding = tot(live, 'outstandingPrincipalCents');
+  const disb = loans.filter((l: any) => l.disbursedInMonth); const wo = loans.filter((l: any) => l.writtenOffInMonth);
+  return { ...data, loans, aggregates: { ...data.aggregates,
+    loansOutstanding: { count: live.length, principalCents: s(outstanding) },
+    borrowersOutstanding: new Set(live.map((l: any) => l.supplierKraPin)).size,
+    buyersOutstanding: new Set(live.map((l: any) => l.buyerKraPin)).size,
+    disbursedInMonth: { count: disb.length, principalCents: s(tot(disb, 'principalCents')) },
+    repaidInMonth: { principalCents: sumM('principalCents'), feesCents: sumM('feesCents'), interestCents: sumM('interestCents'), supplierBalanceCents: sumM('supplierBalanceCents') },
+    incomeInMonth: { interestCents: sumM('interestCents'), feesCents: sumM('feesCents') },
+    ageing, statusAtMonthEnd,
+    nplRatioBps: bpsOf(BigInt(statusAtMonthEnd.non_performing.principalCents), outstanding),
+    writtenOffInMonth: { count: wo.length, principalCents: s(tot(wo, 'writtenOffPrincipalCents')) },
+    inDuplumWaivedInMonthCents: s(tot(loans, 'inDuplumWaivedInMonthCents')),
+  } };
+}
 
 @Injectable()
 export class RegulatoryService implements OnModuleInit {
@@ -36,6 +66,7 @@ export class RegulatoryService implements OnModuleInit {
     private readonly approvals: ApprovalsService,
     private readonly settings: SettingsService,
     @Inject(CONFIG) private readonly cfg: AppConfig,
+    private readonly funding: FundingService,
   ) {}
 
   async onModuleInit() {
@@ -188,14 +219,21 @@ export class RegulatoryService implements OnModuleInit {
   }
 
   // ------------------------------------------------------------------ generation
-  async generate(u: AuthUser | null, snapshotId: string, kind: 'cbk_return' | 'crb_file' | 'lender_pack') {
+  async generate(u: AuthUser | null, snapshotId: string, kind: 'cbk_return' | 'crb_file' | 'lender_pack', fundingSource?: string) {
     const snap = await this.getSnapshot(snapshotId);
+    if (fundingSource && kind !== 'lender_pack') throw badRequest('FUNDING_SOURCE_NOT_APPLICABLE', 'Only a lender pack can be cut per funding source');
     if (!snap.verified) throw conflict('SNAPSHOT_TAMPERED', 'Snapshot hash does not verify');
     const t = await this.db.one(`SELECT * FROM report_template WHERE kind = $1 AND active`, [kind]);
     if (!t) throw conflict('NO_TEMPLATE', `No active ${kind} template`);
     const m: TemplateMeta = { kind, version: t.version, status: t.status, sourceRef: t.source_ref };
     const sm = { period: snap.period, version: snap.version, sha256: snap.sha256 };
-    const data = snap.data;
+    let data = snap.data;
+    if (fundingSource) {
+      await this.funding.source(fundingSource); // 404 if unknown
+      // Phase 3 FUND-05: the tag as at month end decides which funder's pack a loan sits in (history, not today's tag)
+      const tags = await this.funding.tagsAsOf(snap.data.asOfDate);
+      data = funderView(snap.data, (l: any) => tags.get(l.advanceId) === fundingSource);
+    }
     const draft = t.status !== 'official';
     const base = `mapema-${kind.replace('_', '-')}-${snap.period}-v${snap.version}`;
     const files: { format: 'csv' | 'pdf'; filename: string; content: Buffer }[] = [];
@@ -218,9 +256,11 @@ export class RegulatoryService implements OnModuleInit {
     } else {
       const map = t.mapping as PackMapping;
       const sumCsv = renderReturnCsv(data, { type: 'return', fields: map.summary }, m, sm);
-      files.push({ format: 'csv', filename: `mapema-lender-pack-${snap.period}-v${snap.version}-loan-tape.csv`, content: Buffer.from(renderTapeCsv(data, map, sm)) });
-      files.push({ format: 'csv', filename: `mapema-lender-pack-${snap.period}-v${snap.version}-summary.csv`, content: Buffer.from(sumCsv) });
-      files.push({ format: 'pdf', filename: `mapema-lender-pack-${snap.period}-v${snap.version}.pdf`, content: pdfDocument(`Mapema - Lender portfolio pack ${snap.period}`, lenderPackLines(data, map, sm)) });
+      const fb = fundingSource ? `mapema-lender-pack-${fundingSource}-${snap.period}-v${snap.version}` : `mapema-lender-pack-${snap.period}-v${snap.version}`;
+      files.push({ format: 'csv', filename: `${fb}-loan-tape.csv`, content: Buffer.from(renderTapeCsv(data, map, sm)) });
+      files.push({ format: 'csv', filename: `${fb}-summary.csv`, content: Buffer.from(sumCsv) });
+      files.push({ format: 'pdf', filename: `${fb}.pdf`, content: pdfDocument(`Mapema - Lender portfolio pack ${snap.period}${fundingSource ? ` - funding source ${fundingSource}` : ''}`, lenderPackLines(data, map, sm)) });
+      if (fundingSource) extra = { fundingSource, loans: data.loans.length };
     }
     const artifacts = await this.db.tx(async (c) => {
       const out: any[] = [];
@@ -292,7 +332,8 @@ export class RegulatoryController {
 
   @Post('snapshots/:id/generate') @Roles('compliance', 'ceo')
   generate(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() b: unknown) {
-    return this.s.generate(u, zUuid.parse(id), z.object({ kind: z.enum(['cbk_return', 'crb_file', 'lender_pack']) }).parse(b).kind);
+    const body = z.object({ kind: z.enum(['cbk_return', 'crb_file', 'lender_pack']), fundingSource: z.string().regex(/^[A-Z0-9-]{2,24}$/).optional() }).parse(b);
+    return this.s.generate(u, zUuid.parse(id), body.kind, body.fundingSource);
   }
 
   @Get('artifacts/:id/download') @Roles(...READERS)

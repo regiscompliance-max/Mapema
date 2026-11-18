@@ -210,7 +210,7 @@ describe(`Phase 3 [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
     const loan = Number((await adv(a)).fineract_loan_id);
     const fac = (await w.ops.get('/funding-sources')).find((s: any) => s.code === 'FAC-A');
     if (!REAL_LEDGER) expect(await h.adapters.ledger.getFundingTag(loan)).toEqual({ fundId: Number(fac.fineractFundId), tagCode: 'FAC-A' });
-    const inv90 = await eligibleInvoice(h, w, { number: 'INV-P3-F90', amountCents: kes(500_000), dueDate: addDays(Q, 90) });
+    const inv90 = await eligibleInvoice(h, w, { number: 'INV-P3-F90', amountCents: kes(500_000), issueDate: addDays(Q, -6), dueDate: addDays(Q, 90) });
     const a90 = await request(inv90);
     const refused = await approve(a90, { fundingSource: 'FAC-A' }, 422);
     expect(refused.title).toBe('FUNDING_SOURCE_INELIGIBLE');
@@ -304,7 +304,7 @@ describe(`Phase 3 [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
   });
 
   it('TC-P3-MP-03 a failed result undoes the ledger disbursal and frees the invoice; nothing is resent', async () => {
-    const inv = await eligibleInvoice(h, w, { number: 'INV-P3-MP2', amountCents: kes(150_000), dueDate: addDays(Q, 70) });
+    const inv = await eligibleInvoice(h, w, { number: 'INV-P3-MP2', amountCents: kes(150_000), issueDate: addDays(Q, -3), dueDate: addDays(Q, 70) });
     const a = await request(inv);
     await approve(a);
     await release(a);
@@ -321,7 +321,7 @@ describe(`Phase 3 [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
   });
 
   it('TC-P3-MP-04 timeout: a status query runs, an unknown state is left for ops (never auto-resent), and a later completion is applied; a name mismatch raises an AML flag', async () => {
-    const inv = await eligibleInvoice(h, w, { number: 'INV-P3-MP3', amountCents: kes(150_000), dueDate: addDays(Q, 70) });
+    const inv = await eligibleInvoice(h, w, { number: 'INV-P3-MP3', amountCents: kes(150_000), issueDate: addDays(Q, -4), dueDate: addDays(Q, 70) });
     const a = await request(inv);
     await approve(a);
     await release(a);
@@ -345,7 +345,7 @@ describe(`Phase 3 [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
     expect((await h.admin.query(`SELECT rule_code FROM mapema.aml_flag WHERE entity_id = $1`, [p.id])).rows.map((r) => r.rule_code)).toEqual(['MPESA_NAME_MISMATCH']);
     expect(mp().requests.filter((r) => r.idempotencyKey === p.idempotency_key)).toHaveLength(1);
     // and an M-Pesa payout that is still pending (no callback yet) for the reconciliation below
-    const inv4 = await eligibleInvoice(h, w, { number: 'INV-P3-MP4', amountCents: kes(150_000), dueDate: addDays(Q, 70) });
+    const inv4 = await eligibleInvoice(h, w, { number: 'INV-P3-MP4', amountCents: kes(150_000), issueDate: addDays(Q, -5), dueDate: addDays(Q, 70) });
     const a4 = await request(inv4); await approve(a4); await release(a4);
     ids.mpPending = a4;
     h.clock.set(AT(Q));
@@ -360,7 +360,7 @@ describe(`Phase 3 [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
     expect(charges.length).toBe(2); // two completed B2C payouts at KES 15 each
     expect(charges.every((b: any) => b.difference_cents === String(-kes(15)) && b.classification === 'explained')).toBe(true);
     const pend = breaks.find((b: any) => b.category === 'payout_in_transit');
-    expect(pend).toMatchObject({ classification: 'timing', difference_cents: String(-kes(120_000)) });
+    expect(pend).toMatchObject({ classification: 'timing', difference_cents: String(kes(120_000)) }); // platform-side payout amount (Phase 2 recon sign convention)
     expect(breaks.filter((b: any) => b.classification === 'unexplained')).toEqual([]);
     expect(run).toMatchObject({ status: 'explained', unexplained_count: 0 });
   });
@@ -369,7 +369,7 @@ describe(`Phase 3 [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
   it('TC-P3-BULK-01 buyer bulk confirmation: per-item results, one ILU for all approved invoices', async () => {
     h.clock.set(AT(Q));
     const csv = ['supplier_kra_pin,invoice_number,amount_cents,currency,issue_date,due_date,etims_cu_invoice_no',
-      ...[1, 2, 3].map((n) => `P051111111B,INV-P3-B${n},${kes(300_000)},KES,${addDays(Q, -2)},${addDays(Q, 70)},KRACUB${n}`),
+      ...[1, 2, 3].map((n) => `P051111111B,INV-P3-B${n},${kes(300_000)},KES,${addDays(Q, -1 - n)},${addDays(Q, 70)},KRACUB${n}`),
       `P051111111B,INV-P3-B4,${kes(100_000)},KES,${addDays(Q, -2)},${addDays(Q, 70)},KRACUB4`].join('\n');
     const up = await w.buyerAdmin.post('/invoices/csv', { csv });
     const invIds = up.results.map((r: any) => r.invoiceId);

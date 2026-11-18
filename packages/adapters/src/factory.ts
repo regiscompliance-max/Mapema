@@ -2,6 +2,8 @@
  * [DevOps + Integration Engineer] Build the adapter set from environment configuration.
  * ADAPTER_MODE_<NAME> = mock | sandbox | live. Production refuses mock mode (ADM-08).
  */
+import { ErpRegistry } from './erp';
+import { DarajaMpesa, MockMpesa, MpesaAdapter } from './mpesa';
 import { AdapterMode } from './common';
 import { BankAdapter, MockBank, UnconfiguredBank } from './bank';
 import { EsignAdapter, MockEsign, UnconfiguredEsign } from './esign';
@@ -26,6 +28,8 @@ export interface Adapters {
   accounting: AccountingAdapter;
   crm: CrmAdapter;
   leads: LeadSourceAdapter;
+  erp: ErpRegistry;
+  mpesa: MpesaAdapter;
 }
 
 function mode(env: Record<string, string | undefined>, name: string): AdapterMode {
@@ -57,6 +61,9 @@ export function createAdapters(env: Record<string, string | undefined>): Adapter
   const accountingMode = mode(env, 'ACCOUNTING');
   const crmMode = mode(env, 'CRM');
   const leadsMode = mode(env, 'SITE_LEADS');
+  const erpMode = mode(env, 'ERP');
+  const mpesaMode = mode(env, 'MPESA');
+  const cb = (env.MPESA_CALLBACK_BASE_URL ?? '').replace(/\/$/, '');
   return {
     ledger,
     bank: bankMode === 'mock' ? new MockBank(env.BANK_WEBHOOK_SECRET) : new UnconfiguredBank(bankMode),
@@ -68,6 +75,12 @@ export function createAdapters(env: Record<string, string | undefined>): Adapter
     email: emailMode === 'mock' ? new MockEmail() : new PostmarkEmail(emailMode, { serverToken: env.POSTMARK_SERVER_TOKEN ?? '', from: env.EMAIL_FROM ?? 'no-reply@mapema.example' }),
     accounting: accountingMode === 'mock' ? new MockAccounting() : new XeroAccounting(accountingMode, { accessToken: env.XERO_ACCESS_TOKEN ?? '', tenantId: env.XERO_TENANT_ID ?? '' }),
     crm: crmMode === 'mock' ? new MockCrm() : new HubSpotCrm(crmMode, { token: env.HUBSPOT_PRIVATE_APP_TOKEN ?? '', pipelineId: env.HUBSPOT_BUYER_PIPELINE_ID, dealStageId: env.HUBSPOT_BUYER_DEAL_STAGE_ID }),
+    erp: new ErpRegistry(erpMode, env),
+    mpesa: mpesaMode === 'mock' ? new MockMpesa() : new DarajaMpesa(mpesaMode, {
+      baseUrl: env.MPESA_BASE_URL ?? 'https://sandbox.safaricom.co.ke', consumerKey: env.MPESA_CONSUMER_KEY ?? '', consumerSecret: env.MPESA_CONSUMER_SECRET ?? '',
+      shortcode: env.MPESA_SHORTCODE ?? '', initiatorName: env.MPESA_INITIATOR_NAME ?? '', securityCredential: env.MPESA_SECURITY_CREDENTIAL ?? '',
+      resultUrl: `${cb}/v1/webhooks/mpesa/b2c/result/${env.MPESA_CALLBACK_TOKEN ?? ''}`, timeoutUrl: `${cb}/v1/webhooks/mpesa/b2c/timeout/${env.MPESA_CALLBACK_TOKEN ?? ''}`,
+    }),
     leads: leadsMode === 'mock' ? new MockSiteLeadSource() : new D1SiteLeadSource(leadsMode, { accountId: env.SITE_D1_ACCOUNT_ID ?? '', databaseId: env.SITE_D1_DATABASE_ID ?? '', token: env.SITE_D1_API_TOKEN ?? '' }),
   };
 }

@@ -36,9 +36,14 @@ import { ReconciliationController, ReconciliationService } from './modules/recon
 import { RegulatoryController, RegulatoryService } from './modules/regulatory';
 import { DashboardsController, DashboardsService } from './modules/dashboards';
 import { IntegrationsController, IntegrationsService } from './modules/integrations';
+import { FundingController, FundingService } from './modules/funding';
+import { MpesaController, MpesaService } from './modules/mpesa';
+import { ErpController, ErpService } from './modules/erp';
+import { BulkController, BulkService } from './modules/bulk';
 
 export const CONTROLLERS = [AuthSessionController, PublicController, OnboardingController, InvoicesController, AdvancesController, PaymentsController, CreditReviewController, SelfServiceController, OpsController, ApprovalsController, AdminController, ReportsController,
-  CollectionsController, ReconciliationController, RegulatoryController, DashboardsController, IntegrationsController];
+  CollectionsController, ReconciliationController, RegulatoryController, DashboardsController, IntegrationsController,
+  FundingController, MpesaController, ErpController, BulkController];
 
 export interface AppOverrides { adapters?: Adapters; storage?: StorageAdapter }
 
@@ -57,12 +62,13 @@ export class AppModule implements NestModule {
         Db, Clock, Audit, FieldCrypto, Outbox, Notifier, Idempotency, DevIdp, TokenVerifier, Identity, Sessions,
         ApprovalsService, SettingsService, DocumentsService, OnboardingService, InvoicesService, AdvancesService, PaymentsService, OpsService, ReportsService, PublicService, CreditReviewService, SelfService,
         CollectionsService, ReconciliationService, RegulatoryService, DashboardsService, IntegrationsService,
+        FundingService, MpesaService, ErpService, BulkService,
         ...(cfg.RATE_LIMIT_STORE === 'postgres' ? [{ provide: ThrottlerStorage, useClass: PgThrottlerStorage }] : []),
         { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: APP_GUARD, useClass: AuthGuard },
         { provide: APP_FILTER, useClass: ProblemFilter },
       ],
-      exports: [Db, Clock, Outbox, PaymentsService, OpsService, AdvancesService, CreditReviewService, CollectionsService, ReconciliationService, RegulatoryService, IntegrationsService, ADAPTERS],
+      exports: [Db, Clock, Outbox, PaymentsService, OpsService, AdvancesService, CreditReviewService, CollectionsService, ReconciliationService, RegulatoryService, IntegrationsService, FundingService, MpesaService, ErpService, ADAPTERS],
     };
   }
 

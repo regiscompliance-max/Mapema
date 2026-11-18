@@ -51,6 +51,12 @@ export class SettingsService implements OnModuleInit {
     return (await q.query(`SELECT value FROM platform_setting WHERE key = 'lending'`)).rows[0].value;
   }
 
+  /** Phase 3 MP-02: largest advance paid by M-Pesa B2C (maker-checker change, CEO). */
+  async mpesaCap(q: Q = this.db.pool): Promise<bigint> {
+    const r = (await q.query(`SELECT value FROM platform_setting WHERE key = 'mpesa_payout_cap_cents'`)).rows[0];
+    return r ? BigInt(r.value) : 15_000_000n;
+  }
+
   async invoiceMinimum(q: Q = this.db.pool): Promise<bigint> {
     return BigInt((await q.query(`SELECT value FROM platform_setting WHERE key = 'invoice_minimum_cents'`)).rows[0].value);
   }

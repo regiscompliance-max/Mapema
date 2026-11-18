@@ -40,6 +40,25 @@ export class MockLedger implements LedgerAdapter {
     return { productId: 1, verificationChargeId: 1 };
   }
 
+  private funds = new Map<string, number>();
+  private tags = new Map<number, string>();
+  async ensureFund(code: string, _name: string) {
+    const ex = this.funds.get(code);
+    if (ex) return ex;
+    const id = this.funds.size + 1;
+    this.funds.set(code, id);
+    return id;
+  }
+  async setFundingTag(loanId: number, code: string, _date: string) {
+    if (!this.loans.has(loanId)) throw new AdapterError('ledger-mock', 'LOAN_NOT_FOUND', `loan ${loanId}`);
+    this.tags.set(loanId, code);
+  }
+  async getFundingTag(loanId: number) {
+    const l = this.loans.get(loanId);
+    if (!l) throw new AdapterError('ledger-mock', 'LOAN_NOT_FOUND', `loan ${loanId}`);
+    return { fundId: l.req.fundId ?? null, tagCode: this.tags.get(loanId) ?? null };
+  }
+
   private post(debit: LedgerGl, credit: LedgerGl, amt: Cents) {
     if (amt === 0n) return;
     this.gl.set(debit, (this.gl.get(debit) ?? 0n) + amt);

@@ -12,3 +12,5 @@ export * from './factory';
 export * from './accounting';
 export * from './crm';
 export * from './leads';
+export * from './erp';
+export * from './mpesa';

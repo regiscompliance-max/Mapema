@@ -76,12 +76,25 @@ export class ReconciliationService implements OnModuleInit {
     return out;
   }
 
+  /** Phase 3 MP-05: cash = partner bank account + M-Pesa B2C float (same Fineract cash GL). */
+  private async cash() {
+    const balance0 = await this.adapters.bank.getBalance();
+    const st0 = await this.adapters.bank.getStatement('0001-01-01', '9999-12-31');
+    try {
+      const mb = await this.adapters.mpesa.getBalance();
+      const ms = await this.adapters.mpesa.getStatement('0001-01-01', '9999-12-31');
+      return { balance: balance0 + mb, statement: [...st0, ...ms] };
+    } catch {
+      return { balance: balance0, statement: st0 }; // sandbox/live: no statement API yet (Q-M); M-Pesa payouts then show as breaks
+    }
+  }
+
   async baseline() {
     return this.db.one(`SELECT * FROM reconciliation_baseline ORDER BY effective_at DESC LIMIT 1`);
   }
 
   private async currentBalances() {
-    const [bank, fineract, plat] = [await this.adapters.bank.getBalance(), await this.adapters.ledger.glBalance('bank'), await this.platform()];
+    const [bank, fineract, plat] = [(await this.cash()).balance, await this.adapters.ledger.glBalance('bank'), await this.platform()];
     return { bank, fineract, platform: plat.balance };
   }
 
@@ -97,8 +110,7 @@ export class ReconciliationService implements OnModuleInit {
   async reconcile(date = this.clock.today()) {
     const bl = await this.baseline();
     const baseline = bl ? { bankCents: toCents(bl.bank_cents), fineractCents: toCents(bl.fineract_cents), platformCents: toCents(bl.platform_cents) } : ZERO;
-    const bank = await this.adapters.bank.getBalance();
-    const statement = await this.adapters.bank.getStatement('0001-01-01', '9999-12-31');
+    const { balance: bank, statement } = await this.cash();
     const fineract = await this.adapters.ledger.glBalance('bank');
     const plat = await this.platform();
     const carry = (await this.db.query(`SELECT DISTINCT ON (item_key) item_key, closed_via, difference_cents FROM reconciliation_break

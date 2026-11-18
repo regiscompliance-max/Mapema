@@ -27,6 +27,7 @@ import { ApprovalsService } from './approvals';
 import { kycExpiry } from './credit-reviews';
 import { SettingsService } from './admin';
 import { DocumentsService, simplePdf } from './documents';
+import { FundingService } from './funding';
 import { TERMS_VERSION } from './onboarding';
 
 export const KID_VERSION = 'KID-2026-11-v1';
@@ -48,6 +49,7 @@ export class AdvancesService implements OnModuleInit {
     private readonly crypto: FieldCrypto,
     @Inject(ADAPTERS) private readonly adapters: Adapters,
     @Inject(CONFIG) private readonly cfg: AppConfig,
+    private readonly funding: FundingService,
   ) {}
 
   onModuleInit() {
@@ -161,9 +163,16 @@ export class AdvancesService implements OnModuleInit {
     checks.push({ code: 'BUYER_LIVE', ok: adv.buyer_status === 'live' && adv.programme_status === 'live', detail: `${adv.buyer_status}/${adv.programme_status ?? 'no programme'}` });
     checks.push({ code: 'NO_BUYER_DISPUTE', ok: !adv.dispute_freeze, detail: adv.dispute_freeze ? 'open dispute freezes new advances' : 'none' });
     checks.push({ code: 'SUPPLIER_ACTIVE', ok: adv.supplier_status === 'active' && adv.link_status === 'active', detail: `${adv.supplier_status}/${adv.link_status}` });
-    const ba = (await q.query(`SELECT verified_at, cooling_off_until FROM bank_account WHERE org_id = $1 AND is_payout_default AND deactivated_at IS NULL`, [adv.supplier_id])).rows[0];
+    // Phase 3: the account the approved payout will go to (bank or M-Pesa wallet); before approval the default bank account
+    const pay = (await q.query(`SELECT p.rail, p.amount_cents, p.bank_account_id FROM payout p WHERE p.advance_id = $1 AND p.type = 'advance' AND p.status = 'approved'`, [advanceId])).rows[0];
+    const ba = (await q.query(`SELECT verified_at, cooling_off_until, deactivated_at FROM bank_account WHERE ${pay ? 'id = $1' : 'org_id = $1 AND is_payout_default AND deactivated_at IS NULL'}`, [pay ? pay.bank_account_id : adv.supplier_id])).rows[0];
+    if (ba?.deactivated_at) ba.verified_at = null;
     const baOk = Boolean(ba?.verified_at) && (!ba.cooling_off_until || new Date(ba.cooling_off_until) <= this.clock.now());
     checks.push({ code: 'PAYOUT_ACCOUNT_VERIFIED', ok: baOk, detail: !ba ? 'no account' : !ba.verified_at ? 'not verified by call-back' : baOk ? 'verified' : 'in cooling-off after change' });
+    if (pay?.rail === 'mpesa_b2c') {
+      const cap = await this.settings.mpesaCap(q);
+      checks.push({ code: 'MPESA_CAP', ok: toCents(pay.amount_cents) <= cap, detail: `${formatKes(toCents(pay.amount_cents))} of cap ${formatKes(cap)}` });
+    }
     // CRD-07: a party past its review date or KYC expiry is excluded from new advances
     const today = this.clock.today();
     const lr = (await q.query(`SELECT MIN(review_date) AS d FROM limit_config WHERE active AND subject IN ('buyer','supplier') AND subject_org_id IN ($1,$2) AND review_date IS NOT NULL`, [adv.buyer_id, adv.supplier_id])).rows[0]?.d as string | null;
@@ -225,7 +234,17 @@ export class AdvancesService implements OnModuleInit {
   }
 
   // ------------------------------------------------------------------ credit decision (CRD-06/08)
-  async decide(u: AuthUser, id: string, decision: 'approve' | 'decline', reason: string) {
+  /** Phase 3 MP-01: M-Pesa when the supplier has a verified wallet and the amount is whole shillings within the cap; else bank. */
+  async payoutRoute(q: Q, supplierId: string, principal: bigint): Promise<{ rail: 'mpesa_b2c' | 'pesalink'; bankAccountId: string }> {
+    const bank = (await q.query(`SELECT id FROM bank_account WHERE org_id = $1 AND is_payout_default AND deactivated_at IS NULL`, [supplierId])).rows[0];
+    const wallet = (await q.query(`SELECT id, verified_at, cooling_off_until FROM bank_account WHERE org_id = $1 AND bank_code = 'MPESA' AND deactivated_at IS NULL ORDER BY created_at DESC LIMIT 1`, [supplierId])).rows[0];
+    const cap = await this.settings.mpesaCap(q);
+    const walletOk = wallet?.verified_at && (!wallet.cooling_off_until || new Date(wallet.cooling_off_until) <= this.clock.now());
+    if (walletOk && principal <= cap && principal % 100n === 0n && principal >= 1_000n) return { rail: 'mpesa_b2c', bankAccountId: wallet.id };
+    return { rail: 'pesalink', bankAccountId: bank?.id };
+  }
+
+  async decide(u: AuthUser, id: string, decision: 'approve' | 'decline', reason: string, fundingSource?: string) {
     const r = await this.db.tx(async (c) => {
       await c.query(`SELECT pg_advisory_xact_lock(hashtext('mapema.release'))`); // approvals reserve limit headroom too: serialise with releases
       const a0 = (await c.query(`SELECT * FROM advance WHERE id = $1 FOR UPDATE`, [id])).rows[0];
@@ -240,12 +259,16 @@ export class AdvancesService implements OnModuleInit {
       const { checks } = await this.checks(c, id);
       const failed = checks.filter((x) => !x.ok);
       if (failed.length) throw unprocessable('CHECKS_FAILED', 'Automatic checks failed; the advance cannot be approved', { failedChecks: failed });
-      const ba = (await c.query(`SELECT id FROM bank_account WHERE org_id = $1 AND is_payout_default AND deactivated_at IS NULL`, [a0.supplier_id])).rows[0];
-      await c.query(`UPDATE advance SET status = 'approved', approved_by = $2, approved_at = now(), updated_at = now() WHERE id = $1`, [id, u.id]);
+      if (fundingSource) {
+        const ev = await this.funding.evaluateFor(c, id, fundingSource);
+        if (ev.applies && !ev.code) throw unprocessable('FUNDING_SOURCE_INELIGIBLE', `${fundingSource} cannot fund this advance`, { evaluations: ev.evaluations });
+      }
+      const route = await this.payoutRoute(c, a0.supplier_id, toCents(a0.principal_cents));
+      await c.query(`UPDATE advance SET status = 'approved', approved_by = $2, approved_at = now(), funding_requested_code = $3, updated_at = now() WHERE id = $1`, [id, u.id, fundingSource ?? null]);
       const p = (await c.query(
         `INSERT INTO payout (advance_id, type, amount_cents, currency, bank_account_id, rail, status, approved_by, idempotency_key)
-         VALUES ($1,'advance',$2,'KES',$3,'pesalink','approved',$4, gen_random_uuid()::text) RETURNING id`, [id, a0.principal_cents, ba.id, u.id])).rows[0];
-      await this.audit.record(c, u.actor, 'advance.approve', 'advance', id, { status: 'requested' }, { status: 'approved', reason, checks, payoutId: p.id });
+         VALUES ($1,'advance',$2,'KES',$3,$4,'approved',$5, gen_random_uuid()::text) RETURNING id`, [id, a0.principal_cents, route.bankAccountId, route.rail, u.id])).rows[0];
+      await this.audit.record(c, u.actor, 'advance.approve', 'advance', id, { status: 'requested' }, { status: 'approved', reason, checks, payoutId: p.id, rail: route.rail, fundingSource: fundingSource ?? null });
       await this.notifier.toRole(c, 'ops', 'advance.approved', { invoice: a0.invoice_id }, { type: 'advance', id });
       return { id, status: 'approved' as const, payoutId: p.id, checks };
     });
@@ -253,20 +276,28 @@ export class AdvancesService implements OnModuleInit {
   }
 
   // ------------------------------------------------------------------ release (OPS-02)
-  async release(u: AuthUser, id: string) {
+  async release(u: AuthUser, id: string, opts: { fromBatch?: string } = {}) {
     const out = await this.db.tx(async (c) => {
       await c.query(`SELECT pg_advisory_xact_lock(hashtext('mapema.release'))`); // serialise limit checks across releases
       const a0 = (await c.query(`SELECT * FROM advance WHERE id = $1 FOR UPDATE`, [id])).rows[0];
       if (!a0) throw notFound('Advance');
       if (a0.status !== 'approved') throw conflict('BAD_STATE', `Advance is ${a0.status}`);
       if (a0.approved_by === u.id) throw forbidden('FOUR_EYES', 'The credit officer who approved an advance cannot also release it');
+      if (!opts.fromBatch) {
+        const inBatch = (await c.query(`SELECT batch_id FROM payout_batch_item WHERE advance_id = $1 AND status = 'pending'`, [id])).rows[0];
+        if (inBatch) throw conflict('IN_BATCH', 'This advance is in a payout batch waiting for approval; approve or cancel the batch');
+      }
       const { checks } = await this.checks(c, id);
+      // Phase 3 FUND-02: tag to a funding source at release (named one validated again; else auto by priority)
+      const fr = await this.funding.evaluateFor(c, id, a0.funding_requested_code);
+      if (fr.applies) checks.push({ code: 'FUNDING_SOURCE', ok: Boolean(fr.code), detail: fr.code ? `${fr.code}: ${fr.reason}` : `no eligible source: ${fr.evaluations.map((e) => `${e.code} ${e.reasons.join('/')}`).join('; ')}` });
       const failed = checks.filter((x) => !x.ok);
       if (failed.length) throw unprocessable('CHECKS_FAILED', 'Checks failed at release time; payment not released', { failedChecks: failed });
+      await this.funding.tagAtRelease(c, id, fr);
       const p = (await c.query(`UPDATE payout SET status = 'released', released_by = $2, released_at = now() WHERE advance_id = $1 AND type = 'advance' AND status = 'approved' RETURNING id`, [id, u.id])).rows[0];
       await c.query(`UPDATE advance SET status = 'released', released_by = $2, updated_at = now() WHERE id = $1`, [id, u.id]);
       const ob = await this.outbox.enqueue(c, 'advance.disburse', id, `disburse-${id}`, { advanceId: id });
-      await this.audit.record(c, u.actor, 'advance.release', 'advance', id, { status: 'approved' }, { status: 'released', payoutId: p.id, checks });
+      await this.audit.record(c, u.actor, 'advance.release', 'advance', id, { status: 'approved' }, { status: 'released', payoutId: p.id, checks, fundingSource: fr.code, batchId: opts.fromBatch ?? null });
       return { outboxId: ob };
     });
     await this.outbox.kick(out.outboxId);
@@ -291,11 +322,35 @@ export class AdvancesService implements OnModuleInit {
       await this.db.query(`UPDATE organisation SET fineract_client_id = $2 WHERE id = $1`, [a.supplier_id, clientId]);
     }
     const termDays = daysBetween(today, a.due_date);
+    const fundId = await this.funding.fundIdFor(advanceId);
     const { loanId } = await this.adapters.ledger.bookAdvance(ctx, {
       externalId: advanceId, clientId, principalCents: toCents(a.principal_cents), rateBpsPer30d: a.rate_bps_per_30d, days: termDays,
-      disbursementDate: today, dueDate: a.due_date, verificationFeeCents: toCents(a.verification_fee_cents),
+      disbursementDate: today, dueDate: a.due_date, verificationFeeCents: toCents(a.verification_fee_cents), fundId,
     });
     await this.db.query(`UPDATE advance SET fineract_loan_id = $2, disbursement_date = $3 WHERE id = $1`, [advanceId, loanId, today]);
+    if (fundId) await this.funding.syncLedgerTag(advanceId);
+    // 2a. M-Pesa B2C (Phase 3): asynchronous - accepted now, result on the callback; never resent on doubt
+    if (payout.rail === 'mpesa_b2c') {
+      try {
+        const acc = await this.adapters.mpesa.b2cPayment(ctx, { idempotencyKey: payout.idempotency_key, amountCents: toCents(payout.amount_cents), msisdn: this.crypto.decrypt(payout.account_number_enc)!, remarks: `Mapema advance ${a.invoice_number}`.slice(0, 100) });
+        await this.db.tx(async (c) => {
+          await c.query(`UPDATE payout SET bank_ref = $2, value_date = $3, mpesa_state = 'accepted', mpesa_conversation_id = $4, mpesa_requested_at = $5 WHERE id = $1`, [payout.id, acc.originatorConversationId, today, acc.conversationId, this.clock.now()]);
+          await this.audit.record(c, SYSTEM, 'payout.mpesa_accepted', 'payout', payout.id, null, { advanceId, conversationId: acc.conversationId });
+        });
+      } catch (e) {
+        if (e instanceof AdapterError && e.retryable) {
+          // the request may or may not have reached Safaricom: park as unknown, query status later, do not resend
+          await this.db.tx(async (c) => {
+            await c.query(`UPDATE payout SET bank_ref = $2, value_date = $3, mpesa_state = 'unknown', mpesa_requested_at = $4 WHERE id = $1`, [payout.id, payout.idempotency_key, today, this.clock.now()]);
+            await this.audit.record(c, SYSTEM, 'payout.mpesa_unknown', 'payout', payout.id, null, { advanceId, error: e.message.slice(0, 200) });
+            await this.notifier.toRole(c, 'ops', 'mpesa.unknown', { invoice: a.invoice_number }, { type: 'payout', id: payout.id });
+          });
+          return;
+        }
+        await this.failDisbursal(advanceId, payout.id, loanId, `${e instanceof AdapterError ? e.code : 'MPESA_ERROR'}: ${(e as Error).message.replace(/^\[[^\]]+\] [A-Z_]+: /, '')}`.slice(0, 200), '', 'mpesa');
+      }
+      return;
+    }
     // 2. bank
     let bank: { bankRef: string; status: string; failureReason?: string };
     try {
@@ -309,21 +364,40 @@ export class AdvancesService implements OnModuleInit {
       bank = { bankRef: '', status: 'failed', failureReason: (e as Error).message.slice(0, 200) };
     }
     if (bank.status === 'failed') {
-      await this.adapters.ledger.undoDisbursal(ctx, loanId);
-      await this.db.tx(async (c) => {
-        await c.query(`UPDATE payout SET status = 'failed', failure_reason = $2, bank_ref = NULLIF($3,'') WHERE id = $1`, [payout.id, bank.failureReason, bank.bankRef]);
-        await c.query(`UPDATE advance SET status = 'release_failed', fineract_loan_id = NULL, decline_reason = $2, updated_at = now() WHERE id = $1`, [advanceId, `bank: ${bank.failureReason}`]);
-        await c.query(`UPDATE invoice SET status = 'eligible', updated_at = now() WHERE id = $1`, [a.invoice_id]);
-        await this.audit.record(c, SYSTEM, 'advance.release_failed', 'advance', advanceId, { status: 'released' }, { status: 'release_failed', reason: bank.failureReason, ledgerUndone: loanId });
-        await this.notifier.toOrg(c, a.supplier_id, 'advance.release_failed', { invoice: a.invoice_number, reason: 'the bank rejected the payment' });
-      });
+      await this.failDisbursal(advanceId, payout.id, loanId, bank.failureReason ?? 'failed', bank.bankRef, 'bank');
       return;
     }
+    await this.markFunded(advanceId, payout.id, bank.bankRef, today);
+  }
+
+  /** Payment failed: undo the ledger disbursal, free the invoice (D-15). Used for bank and M-Pesa results. */
+  async failDisbursal(advanceId: string, payoutId: string, loanId: number, reason: string, ref: string, via: 'bank' | 'mpesa') {
+    const a = await this.db.one(`SELECT a.supplier_id, a.invoice_id, i.invoice_number FROM advance a JOIN invoice i ON i.id = a.invoice_id WHERE a.id = $1`, [advanceId]);
+    await this.adapters.ledger.undoDisbursal({ requestId: `undo-${advanceId}` }, loanId);
+    await this.db.tx(async (c) => {
+      await c.query(`UPDATE payout SET status = 'failed', failure_reason = $2, bank_ref = COALESCE(NULLIF($3,''), bank_ref), mpesa_state = CASE WHEN rail = 'mpesa_b2c' THEN 'failed' ELSE mpesa_state END WHERE id = $1`, [payoutId, reason, ref]);
+      await c.query(`UPDATE advance SET status = 'release_failed', fineract_loan_id = NULL, decline_reason = $2, updated_at = now() WHERE id = $1`, [advanceId, `${via}: ${reason}`]);
+      await c.query(`UPDATE invoice SET status = 'eligible', updated_at = now() WHERE id = $1`, [a.invoice_id]);
+      await this.audit.record(c, SYSTEM, 'advance.release_failed', 'advance', advanceId, { status: 'released' }, { status: 'release_failed', reason, ledgerUndone: loanId, via });
+      await this.notifier.toOrg(c, a.supplier_id, 'advance.release_failed', { invoice: a.invoice_number, reason: via === 'bank' ? 'the bank rejected the payment' : 'M-Pesa could not complete the payment' });
+    });
+  }
+
+  /** Payment confirmed (bank accepted / M-Pesa result): funded + notice of assignment + alerts. */
+  async markFunded(advanceId: string, payoutId: string, bankRef: string, today = this.clock.today()) {
+    const a = await this.db.one(
+      `SELECT a.*, s.legal_name AS supplier_name, i.invoice_number, i.amount_cents AS invoice_amount_cents, b.legal_name AS buyer_name
+       FROM advance a JOIN organisation s ON s.id = a.supplier_id JOIN invoice i ON i.id = a.invoice_id JOIN organisation b ON b.id = a.buyer_id WHERE a.id = $1`, [advanceId]);
+    if (!a || a.status !== 'released') return;
+    const payout = await this.db.one(`SELECT p.*, ba.account_number_last4 FROM payout p JOIN bank_account ba ON ba.id = p.bank_account_id WHERE p.id = $1`, [payoutId]);
+    const loanId = a.fineract_loan_id;
+    const bank = { bankRef };
     // 3. funded + notice of assignment + alerts
     const acct = await this.db.one(`SELECT virtual_account_no FROM collection_account WHERE buyer_id = $1`, [a.buyer_id]);
     await this.db.tx(async (c) => {
-      await c.query(`UPDATE payout SET bank_ref = $2, value_date = $3 WHERE id = $1`, [payout.id, bank.bankRef, today]);
-      await c.query(`UPDATE advance SET status = 'funded', disbursed_at = now(), mirror_principal_outstanding_cents = principal_cents, mirror_refreshed_at = now(), updated_at = now() WHERE id = $1`, [advanceId]);
+      const won = (await c.query(`UPDATE advance SET status = 'funded', disbursed_at = now(), mirror_principal_outstanding_cents = principal_cents, mirror_refreshed_at = now(), updated_at = now() WHERE id = $1 AND status = 'released' RETURNING id`, [advanceId])).rows[0];
+      if (!won) return; // a concurrent callback already funded it
+      await c.query(`UPDATE payout SET bank_ref = $2, value_date = COALESCE(value_date, $3) WHERE id = $1`, [payout.id, bank.bankRef, today]);
       await c.query(`UPDATE invoice SET status = 'funded', updated_at = now() WHERE id = $1`, [a.invoice_id]);
       const notice = simplePdf('Notice of Assignment', [
         `To: ${a.buyer_name}`, `Invoice ${a.invoice_number} from ${a.supplier_name} for ${formatKes(toCents(a.invoice_amount_cents))} has been assigned to Mapema.`,
@@ -355,7 +429,7 @@ export class AdvancesService implements OnModuleInit {
   }
 
   async get(u: AuthUser, id: string) {
-    const a = await this.db.one(`SELECT a.*, i.invoice_number FROM advance a JOIN invoice i ON i.id = a.invoice_id WHERE a.id = $1`, [id]);
+    const a = await this.db.one(`SELECT a.*, i.invoice_number, fs.code AS funding_source_code FROM advance a JOIN invoice i ON i.id = a.invoice_id LEFT JOIN funding_source fs ON fs.id = a.funding_source_id WHERE a.id = $1`, [id]);
     if (!a) throw notFound('Advance');
     if (!isStaff(u) && !hasRole(u, 'auditor', 'lender') && !u.roles.some((r) => r.orgId === a.supplier_id || r.orgId === a.buyer_id)) throw notFound('Advance');
     const payouts = await this.db.query(`SELECT id, type, amount_cents, status, bank_ref, released_at, confirmed_at, failure_reason FROM payout WHERE advance_id = $1 ORDER BY created_at`, [id]);
@@ -412,8 +486,8 @@ export class AdvancesController {
   @Roles('credit')
   @StepUp()
   decide(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() b: unknown) {
-    const body = z.object({ decision: z.enum(['approve', 'decline']), reason: zText(1000) }).parse(b);
-    return this.s.decide(u, zUuid.parse(id), body.decision, body.reason);
+    const body = z.object({ decision: z.enum(['approve', 'decline']), reason: zText(1000), fundingSource: z.string().max(24).optional() }).parse(b);
+    return this.s.decide(u, zUuid.parse(id), body.decision, body.reason, body.fundingSource);
   }
 
   @Post('advances/:id/release')

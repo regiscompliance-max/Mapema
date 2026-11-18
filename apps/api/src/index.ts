@@ -12,3 +12,7 @@ export * from './modules/collections';
 export * from './modules/reconciliation';
 export * from './modules/regulatory';
 export * from './modules/integrations';
+export * from './modules/funding';
+export * from './modules/mpesa';
+export * from './modules/erp';
+export * from './modules/bulk';

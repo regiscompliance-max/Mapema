@@ -9,12 +9,14 @@
  *  - daily 08:00 EAT: collections - reminders, DPD moves, recourse cases, NPL + in duplum cap (contact hours)
  *  - hourly: CRM import of buyer leads from the site D1 database
  *  - 1st of the month 02:00 EAT: month-end snapshot + CBK return + CRB file + lender pack
+ *  - every 15 min (Phase 3): ERP invoice imports for connections that are due
+ *  - every 5 min (Phase 3): M-Pesa B2C payouts with no result yet - status query after the timeout, never a resend
  * Only one worker runs jobs at a time (Postgres advisory lock), so scaling out is safe.
  */
 import 'reflect-metadata';
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { AdvancesService, AppModule, Clock, CollectionsService, CreditReviewService, Db, IntegrationsService, loadConfig, Outbox, PaymentsService, ReconciliationService, RegulatoryService } from '@mapema/api';
+import { AdvancesService, AppModule, Clock, CollectionsService, CreditReviewService, Db, ErpService, IntegrationsService, loadConfig, MpesaService, Outbox, PaymentsService, ReconciliationService, RegulatoryService } from '@mapema/api';
 import { addDays } from '@mapema/pricing';
 
 const log = new Logger('Worker');
@@ -35,23 +37,39 @@ export function dueJobs(jobs: Job[], now: Date, last: Map<string, string | numbe
   });
 }
 
+export interface WorkerServices {
+  clock: Pick<Clock, 'today'>; outbox: Pick<Outbox, 'processDue'>; payments: Pick<PaymentsService, 'postHeld'>; advances: Pick<AdvancesService, 'refreshPayoutStatuses'>;
+  reviews: Pick<CreditReviewService, 'run'>; collections: Pick<CollectionsService, 'runDaily'>; recon: Pick<ReconciliationService, 'reconcile'>;
+  integrations: Pick<IntegrationsService, 'pushDailyJournal' | 'importLeads'>; regulatory: Pick<RegulatoryService, 'monthEnd'>;
+  erp: Pick<ErpService, 'runDue'>; mpesa: Pick<MpesaService, 'checkPending'>;
+}
+
+export function buildJobs(s: WorkerServices): Job[] {
+  const { clock } = s;
+  return [
+    { name: 'outbox', everyMs: 5_000, run: () => s.outbox.processDue(50) },
+    { name: 'payout-status', everyMs: 300_000, run: () => s.advances.refreshPayoutStatuses() },
+    { name: 'mpesa-pending', everyMs: 300_000, run: () => s.mpesa.checkPending() },
+    { name: 'erp-import', everyMs: 900_000, run: () => s.erp.runDue() },
+    { name: 'held-remainders', at: '00:15', run: () => s.payments.postHeld(clock.today()) },
+    { name: 'reconciliation', at: '06:30', run: () => s.recon.reconcile(addDays(clock.today(), -1)) },
+    { name: 'accounting-push', at: '06:45', run: () => s.integrations.pushDailyJournal(addDays(clock.today(), -1)) },
+    { name: 'review-reminders', at: '07:00', run: () => s.reviews.run(clock.today()) },
+    { name: 'collections', at: '08:00', run: () => s.collections.runDaily(clock.today()) },
+    { name: 'crm-import', everyMs: 3_600_000, run: () => s.integrations.importLeads() },
+    { name: 'month-end-reports', at: '02:00', dayOfMonth: 1, run: () => s.regulatory.monthEnd(clock.today()) },
+  ];
+}
+
 async function main() {
   const cfg = loadConfig();
   const ctx = await NestFactory.createApplicationContext(AppModule.forRoot(cfg), { logger: ['error', 'warn', 'log'] });
-  const db = ctx.get(Db); const outbox = ctx.get(Outbox); const clock = ctx.get(Clock);
-  const payments = ctx.get(PaymentsService); const advances = ctx.get(AdvancesService); const reviews = ctx.get(CreditReviewService);
-  const collections = ctx.get(CollectionsService); const recon = ctx.get(ReconciliationService); const integrations = ctx.get(IntegrationsService); const regulatory = ctx.get(RegulatoryService);
-  const jobs: Job[] = [
-    { name: 'outbox', everyMs: 5_000, run: () => outbox.processDue(50) },
-    { name: 'payout-status', everyMs: 300_000, run: () => advances.refreshPayoutStatuses() },
-    { name: 'held-remainders', at: '00:15', run: () => payments.postHeld(clock.today()) },
-    { name: 'reconciliation', at: '06:30', run: () => recon.reconcile(addDays(clock.today(), -1)) },
-    { name: 'accounting-push', at: '06:45', run: () => integrations.pushDailyJournal(addDays(clock.today(), -1)) },
-    { name: 'review-reminders', at: '07:00', run: () => reviews.run(clock.today()) },
-    { name: 'collections', at: '08:00', run: () => collections.runDaily(clock.today()) },
-    { name: 'crm-import', everyMs: 3_600_000, run: () => integrations.importLeads() },
-    { name: 'month-end-reports', at: '02:00', dayOfMonth: 1, run: () => regulatory.monthEnd(clock.today()) },
-  ];
+  const db = ctx.get(Db); const clock = ctx.get(Clock);
+  const jobs = buildJobs({
+    clock, outbox: ctx.get(Outbox), payments: ctx.get(PaymentsService), advances: ctx.get(AdvancesService), reviews: ctx.get(CreditReviewService),
+    collections: ctx.get(CollectionsService), recon: ctx.get(ReconciliationService), integrations: ctx.get(IntegrationsService), regulatory: ctx.get(RegulatoryService),
+    erp: ctx.get(ErpService), mpesa: ctx.get(MpesaService),
+  });
   const last = new Map<string, string | number>();
   let stopping = false;
   const stop = () => { stopping = true; };

@@ -33,8 +33,10 @@ describe('TC-P3-WRK-01 Phase 3 jobs', () => {
   it('ERP import every 15 minutes and the M-Pesa pending check every 5 minutes are scheduled next to the Phase 2 jobs', async () => {
     const { buildJobs } = await import('../src/main');
     const calls: string[] = [];
-    const svc = new Proxy({}, { get: (_t, svcName) => new Proxy({}, { get: (_t2, m) => async () => { calls.push(`${String(svcName)}.${String(m)}`); } }) }) as any;
-    const jobs = buildJobs({ ...svc, clock: { today: () => '2027-01-04' } });
+    // (a spread of a Proxy copies no keys, so the clock is served by the same proxy)
+    const clock = { today: () => '2027-01-04' };
+    const svc = new Proxy({}, { get: (_t, svcName) => (svcName === 'clock' ? clock : new Proxy({}, { get: (_t2, m) => async () => { calls.push(`${String(svcName)}.${String(m)}`); } })) }) as any;
+    const jobs = buildJobs(svc);
     const byName = new Map(jobs.map((j) => [j.name, j]));
     expect(byName.get('erp-import')?.everyMs).toBe(900_000);
     expect(byName.get('mpesa-pending')?.everyMs).toBe(300_000);

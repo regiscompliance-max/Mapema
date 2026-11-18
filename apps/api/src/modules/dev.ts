@@ -6,7 +6,7 @@
  */
 import { Body, Controller, Get, Inject, Param, Post } from '@nestjs/common';
 import { z } from 'zod';
-import { Adapters, MockBank, MockEsign } from '@mapema/adapters';
+import { Adapters, MockBank, MockEsign, MockMpesa } from '@mapema/adapters';
 import { ADAPTERS } from '../common/config';
 import { Clock } from '../common/clock';
 import { Db } from '../common/db';
@@ -22,6 +22,8 @@ import { IntegrationsService } from './integrations';
 import { ReconciliationService } from './reconciliation';
 import { RegulatoryService } from './regulatory';
 import { PaymentsService } from './payments';
+import { MpesaService } from './mpesa';
+import { ErpService } from './erp';
 
 @Controller()
 @Public()
@@ -30,7 +32,7 @@ export class DevController {
     private readonly idp: DevIdp, private readonly db: Db, private readonly clock: Clock, private readonly outbox: Outbox,
     private readonly onboarding: OnboardingService, private readonly payments: PaymentsService, private readonly collections: CollectionsService, private readonly advances: AdvancesService,
     private readonly reviews: CreditReviewService, private readonly recon: ReconciliationService, private readonly regulatory: RegulatoryService,
-    private readonly integrations: IntegrationsService,
+    private readonly integrations: IntegrationsService, private readonly mpesa: MpesaService, private readonly erp: ErpService,
     @Inject(ADAPTERS) private readonly adapters: Adapters,
   ) {}
 
@@ -81,6 +83,34 @@ export class DevController {
     return { ok: true };
   }
 
+  /** Simulates topping up the M-Pesa B2C float (utility account) from the bank. */
+  @Post('dev/mpesa/fund')
+  mpesaFund(@Body() b: unknown) {
+    const { amountCents, reference, valueDate } = z.object({ amountCents: z.union([z.string().regex(/^\d+$/), z.number().int().positive()]), reference: z.string().min(3).max(64), valueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).parse(b);
+    const m = this.adapters.mpesa;
+    if (!(m instanceof MockMpesa)) throw new DomainError(400, 'NOT_MOCK', 'M-Pesa adapter is not in mock mode');
+    m.fund(BigInt(amountCents), reference, valueDate ?? this.clock.today());
+    return { ok: true };
+  }
+
+  /** Simulates Safaricom calling the result URL for a pending mock payout (outcome success|failure). */
+  @Post('dev/mpesa/complete')
+  async mpesaComplete(@Body() b: unknown) {
+    const { conversationId, outcome } = z.object({ conversationId: z.string().min(3), outcome: z.enum(['success', 'failure']).default('success') }).parse(b);
+    const m = this.adapters.mpesa;
+    if (!(m instanceof MockMpesa)) throw new DomainError(400, 'NOT_MOCK', 'M-Pesa adapter is not in mock mode');
+    const p = await this.db.one(`SELECT ba.account_name FROM payout p JOIN bank_account ba ON ba.id = p.bank_account_id WHERE p.bank_ref = $1 OR p.mpesa_conversation_id = $1`, [conversationId]);
+    const body = outcome === 'success' ? m.complete(conversationId, { receiverName: p?.account_name ?? 'UNKNOWN', date: this.clock.today() }) : m.fail(conversationId, 2001, 'The initiator information is invalid.');
+    return this.mpesa.onCallback('result', body);
+  }
+
+  /** Pushes fixture records into a mock-mode ERP connection (seed demo). */
+  @Post('dev/erp/:id/push')
+  erpPush(@Param('id') id: string, @Body() b: unknown) {
+    const { records } = z.object({ records: z.array(z.object({ externalId: z.string(), version: z.string(), fields: z.record(z.string(), z.unknown()) })).min(1).max(500) }).parse(b);
+    return this.erp.devPush(id, records as any);
+  }
+
   /** Simulates the statement import of a line that is already on the mock bank statement (REC-06). */
   @Post('dev/bank/ingest-statement')
   async ingestStatement(@Body() b: unknown) {
@@ -114,7 +144,9 @@ export class DevController {
     const ladder = await this.collections.runDaily();
     const payouts = await this.advances.refreshPayoutStatuses();
     const reviews = await this.reviews.run();
-    return { outbox, held, ladder, payouts, reviews };
+    const mpesa = await this.mpesa.checkPending();
+    const erp = await this.erp.runDue();
+    return { outbox, held, ladder, payouts, reviews, mpesa, erp };
   }
 
   @Get('dev/outbox/:id')

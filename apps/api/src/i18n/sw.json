@@ -28,5 +28,10 @@
   "recourse.case_due": "Malipo ya awali ya ankara {invoice} yamechelewa siku {days}. Uamuzi wa kudai kwa msambazaji unahitajika (watu wawili).",
   "collections.npl": "Malipo ya awali ya ankara {invoice} sasa hayafanyi kazi (siku {days} za kuchelewa). Kikomo cha in duplum sasa kinatumika.",
   "recon.unexplained": "Ulinganisho wa hesabu wa {date}: tofauti {count} zisizoelezwa. Kagua na utatue kwenye lango la wafanyakazi kabla ya kutoa malipo.",
-  "accounting.push_failed": "Jarida la hesabu la kila siku la {date} halikutumwa: {reason}."
+  "accounting.push_failed": "Jarida la hesabu la kila siku la {date} halikutumwa: {reason}.",
+  "mpesa.unknown": "Malipo ya M-Pesa ya ankara {invoice} hayana matokeo yaliyothibitishwa. Usitume tena: angalia hali kwenye lango la M-Pesa na utatue kwenye lango la wafanyakazi.",
+  "mpesa.name_mismatch": "Malipo ya M-Pesa ya ankara {invoice} yalienda kwa laini iliyosajiliwa kwa jina tofauti. Alama ya ukaguzi wa AML imewekwa.",
+  "erp.paused": "Muunganisho wa ERP {name} umesitishwa baada ya kushindwa kuingia mara kadhaa. Mwombe mnunuzi abadilishe ufunguo wa API, kisha uuendeleze.",
+  "erp.record_changed": "Ankara {invoice} ilibadilishwa katika {name} baada ya Mapema kuiingiza. Nakala iliyoingizwa haikubadilishwa: ikague pamoja na mnunuzi.",
+  "payout_batch.pending": "Kundi la malipo la vipengee {count} lenye jumla ya {amount} linasubiri idhini ya pili ya shughuli."
 }

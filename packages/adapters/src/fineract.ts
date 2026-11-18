@@ -177,7 +177,7 @@ export class FineractLedger implements LedgerAdapter {
     }
     if (!loanId) {
       const r = await this.call('POST', '/loans', {
-        clientId: req.clientId, productId, externalId: req.externalId, loanType: 'individual',
+        clientId: req.clientId, productId, externalId: req.externalId, loanType: 'individual', ...(req.fundId ? { fundId: req.fundId } : {}),
         principal: centsToDecimal(req.principalCents),
         loanTermFrequency: req.days, loanTermFrequencyType: 0, numberOfRepayments: 1, repaymentEvery: req.days, repaymentFrequencyType: 0,
         interestRatePerPeriod: rate, interestType: 0, interestCalculationPeriodType: 0, amortizationType: 1,
@@ -202,6 +202,41 @@ export class FineractLedger implements LedgerAdapter {
     }
     const after = await this.getLoan(loanId);
     return { loanId, scheduledInterestCents: after.interestChargedCents };
+  }
+
+  // ---------------------------------------------------------------- Phase 3 funding sources
+  static readonly TAG_TABLE = 'mapema_funding_tag';
+  private tagTableReady = false;
+  async ensureFund(code: string, name: string): Promise<number> {
+    const externalId = `mapema-fund-${code}`;
+    const funds = (await this.call('GET', '/funds')) as unknown as Json[];
+    const found = funds.find((f) => f.externalId === externalId);
+    if (found) return Number(found.id);
+    const r = await this.call('POST', '/funds', { name: `${name} (${code})`.slice(0, 100), externalId });
+    return Number(r.resourceId);
+  }
+  private async ensureTagTable() {
+    if (this.tagTableReady) return;
+    // GET /datatables/{name} answers 204 (not 404) for a missing table, so look in the list
+    const all = (await this.call('GET', '/datatables')) as unknown as Json[];
+    if (!all.some((t) => t.registeredTableName === FineractLedger.TAG_TABLE)) {
+      await this.call('POST', '/datatables', { datatableName: FineractLedger.TAG_TABLE, apptableName: 'm_loan', multiRow: false,
+        columns: [{ name: 'tag_code', type: 'String', length: 24, mandatory: true }, { name: 'tagged_on', type: 'Date', mandatory: true }] });
+    }
+    this.tagTableReady = true;
+  }
+  async setFundingTag(loanId: number, code: string, date: string) {
+    await this.ensureTagTable();
+    const body = { tag_code: code, tagged_on: date, dateFormat: 'yyyy-MM-dd', locale: 'en' };
+    const cur = (await this.call('GET', `/datatables/${FineractLedger.TAG_TABLE}/${loanId}`)) as unknown as Json[];
+    if (Array.isArray(cur) && cur.length) await this.call('PUT', `/datatables/${FineractLedger.TAG_TABLE}/${loanId}`, body);
+    else await this.call('POST', `/datatables/${FineractLedger.TAG_TABLE}/${loanId}`, body);
+  }
+  async getFundingTag(loanId: number) {
+    await this.ensureTagTable();
+    const loan = await this.call('GET', `/loans/${loanId}`);
+    const cur = (await this.call('GET', `/datatables/${FineractLedger.TAG_TABLE}/${loanId}`)) as unknown as Json[];
+    return { fundId: loan.fundId ? Number(loan.fundId) : null, tagCode: Array.isArray(cur) && cur[0] ? String(cur[0].tag_code) : null };
   }
 
   async undoDisbursal(_ctx: AdapterContext, loanId: number) {

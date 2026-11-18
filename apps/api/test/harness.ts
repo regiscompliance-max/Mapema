@@ -64,7 +64,7 @@ export async function startHarness(extraEnv: Record<string, string> = {}): Promi
   };
   const cfg = loadConfig(env);
   const adapters = createAdapters(cfg.raw) as Harness['adapters'];
-  const app = await createApp(cfg, { adapters }, { logger: false });
+  const app = await createApp(cfg, { adapters }, { logger: process.env.TEST_LOG ? undefined : false });
   const idp = app.get(DevIdp);
   const clock = app.get(Clock);
   const token: Harness['token'] = (sub, o = {}) => idp.issue(sub, { email: o.email, amr: o.amr ?? ['pwd', 'otp'], authAgeSec: o.authAgeSec ?? 0 });

@@ -27,5 +27,10 @@
   "recourse.case_due": "Advance for invoice {invoice} is {days} days past due. A recourse decision is needed (maker-checker).",
   "collections.npl": "Advance for invoice {invoice} is now non-performing ({days} days past due). The in duplum cap now applies.",
   "recon.unexplained": "Reconciliation for {date}: {count} unexplained break(s). Review and resolve in the staff portal before releasing payouts.",
-  "accounting.push_failed": "Daily accounting journal for {date} was not pushed: {reason}."
+  "accounting.push_failed": "Daily accounting journal for {date} was not pushed: {reason}.",
+  "mpesa.unknown": "M-Pesa payout for invoice {invoice} has no confirmed result. Do not resend: check the status on the M-Pesa org portal and resolve it in the staff portal.",
+  "mpesa.name_mismatch": "M-Pesa payout for invoice {invoice} went to a line registered to a different name. An AML review flag was raised.",
+  "erp.paused": "ERP connection {name} was paused after repeated login failures. Ask the buyer to rotate the API key, then resume it.",
+  "erp.record_changed": "Invoice {invoice} was changed in {name} after Mapema imported it. The imported copy was not changed: review it with the buyer.",
+  "payout_batch.pending": "Payout batch of {count} item(s) totalling {amount} is waiting for a second operations approval."
 }
