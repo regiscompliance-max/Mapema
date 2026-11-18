@@ -52,3 +52,7 @@ Phase 0 decisions D-01 to D-18 are in `phase-0/README.md` (delivered in `mapema-
 | D-46 | Accounting: Xero first (QuickBooks would implement the same adapter). One DRAFT manual journal per day from the Fineract trial-balance movement, idempotent by date; the first run captures the opening TB only; the accountant posts the drafts. Fee-invoice hook built and disabled (D-24). |
 | D-47 | CRM: HubSpot via adapter; hourly import of buyer leads with privacy-notice acceptance only; no marketing opt-in; erasure requests skipped or flagged; the site's D1 is read with a read-only token, and the site Worker is not changed. |
 | D-48 | Month-end snapshots are idempotent per month; a restatement needs a reason and creates version n+1. Snapshots and artefacts are append-only with SHA-256 hashes, and regenerated files must be byte-identical. |
+
+## D-49 Phase 2 sign-off (18 Nov 2026, 06:02 GMT)
+
+CEO approved Phase 2 and its defaults Q-A to Q-J as recorded in docs/phase-2/README.md. CBK/CRB outputs stay DRAFT until official formats arrive.
