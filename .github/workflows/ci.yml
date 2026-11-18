@@ -1,9 +1,9 @@
-# [DevOps] CI. Written in Phase 1 but NOT run (no remote push allowed in Phase 1).
+# [DevOps] CI. Runs on main, on the go-live-hardening branch and on pull requests.
 name: ci
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, go-live-hardening]
 permissions:
   contents: read
 jobs:
@@ -27,8 +27,18 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run typecheck
+      - run: npm run lint
       - run: npm run lint:openapi
       - run: npm test
       - run: npm audit --omit=dev --audit-level=high
   # Real-Fineract E2E (worked example + settlement scenarios) runs nightly against a Fineract service
   # once a pinned image is agreed: E2E_LEDGER=fineract npm run test:e2e:fineract
+  iac:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.9.8 }
+      - run: terraform -chdir=infra/terraform fmt -check
+      - run: terraform -chdir=infra/terraform init -backend=false -input=false
+      - run: terraform -chdir=infra/terraform validate

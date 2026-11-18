@@ -13,4 +13,6 @@ export * from './accounting';
 export * from './crm';
 export * from './leads';
 export * from './erp';
+export * from './egress';
+export * from './scan';
 export * from './mpesa';

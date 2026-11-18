@@ -34,6 +34,8 @@ const TAGS = {
   funding: ['Funding sources', 'Phase 3: funding sources with eligibility rules and covenants (CEO approves), tagging at approval/release kept consistent with Fineract (fund + datatable), re-tagging (maker-checker), utilisation, consistency check.'],
   mpesa: ['M-Pesa B2C', 'Phase 3: Daraja B2C payouts (mock/sandbox only), configurable cap (CEO approves), verified wallets, result/timeout callbacks with a path token, status queries, never auto-resent.'],
   bulk: ['Bulk tools', 'Phase 3: buyer bulk confirmation, supplier bulk quotes, ops payout batches with batch- and item-level maker-checker, per-item limit checks and a full audit trail.'],
+  holidays: ['Business calendar', 'Go-live: Kenyan public holidays (Public Holidays Act, Cap. 110, Schedule Part I as amended 2024, Sunday rule s.4) plus gazetted days added by ops with maker-checker; used by the reconciliation timing window and the reminder schedule.'],
+  'oidc-bff': ['Sign-in (OIDC BFF)', 'Go-live D-32: server-side OIDC authorization-code flow with PKCE and a confidential client; tokens never reach the browser; MFA (amr) checked by the API.'],
   dev: ['Development only', 'Mounted only when DEV_IDP_ENABLED=true and APP_ENV is development or test. Never in staging or production.'],
 };
 const SUMMARIES = {
@@ -52,19 +54,24 @@ const SUMMARIES = {
   'POST /v1/payout-batches/{id}/approve': 'Approve a payout batch (a different ops user, step-up); items release one by one with all checks',
   'POST /v1/webhooks/mpesa/b2c/result/{token}': 'Daraja B2C ResultURL callback (path token; idempotent)',
   'POST /v1/webhooks/mpesa/b2c/timeout/{token}': 'Daraja B2C QueueTimeOutURL callback (status query, never a resend)',
+  'POST /v1/auth/oidc/start': 'Start a sign-in: returns the IdP authorize URL and sets an HttpOnly binding cookie (state/PKCE kept server-side)',
+  'GET /v1/auth/oidc/callback': 'IdP redirect target: code exchange server-side, MFA checked, session cookie set, 302 to the web app',
+  'GET /v1/calendar/holidays': 'Public holidays and gazetted days for a year, with a warning when the moon-dependent Idd-ul-Fitr date is not yet gazetted',
+  'POST /v1/calendar/holidays': 'Propose a gazetted holiday (ops; Gazette Notice reference required; a second ops user approves)',
+  'GET /v1/admin/service-accounts': 'Integration (ERP) service accounts, kept out of the staff list and access reviews (S-14)',
 };
 
 const ops = [];
-const files = [...readdirSync(dir).filter((x) => x.endsWith('.ts')).map((f) => join(dir, f)), join(root, 'apps/api/src/auth/session.controller.ts')];
+const files = [...readdirSync(dir).filter((x) => x.endsWith('.ts')).map((f) => join(dir, f)), join(root, 'apps/api/src/auth/session.controller.ts'), join(root, 'apps/api/src/auth/oidc-bff.ts')];
 for (const file of files) {
   const mod = file.split('/').pop().replace('.ts', '');
   const src = readFileSync(file, 'utf8');
   const lines = src.split('\n');
-  let prefix = null, classPublic = false, classRoles = null, pending = [];
+  let prefix = null, classPublic = false, pending = [];
   for (let i = 0; i < lines.length; i++) {
     const L = lines[i].trim();
     const ctl = L.match(/^@Controller\((?:'([^']*)')?\)/);
-    if (ctl) { prefix = ctl[1] ?? ''; classPublic = pending.includes('@Public') ; classRoles = null; pending = []; 
+    if (ctl) { prefix = ctl[1] ?? ''; classPublic = pending.includes('@Public') ; pending = []; 
       for (let j = i + 1; j < i + 3; j++) if (/^@Public\(\)/.test(lines[j].trim())) classPublic = true;
       continue; }
     if (prefix === null) continue;
@@ -73,7 +80,7 @@ for (const file of files) {
     const sig = L.replace(/@\w+\([^)]*\)\s*/g, '').match(/^(?:async\s+)?(\w+)\(/);
     const http = pending.find((d) => ['Get', 'Post', 'Put', 'Patch', 'Delete'].includes(d.k));
     if (sig && http && !['if', 'for', 'return'].includes(sig[1])) {
-      const sub = (http.a.match(/'([^']*)'/) ?? [, ''])[1];
+      const sub = (http.a.match(/'([^']*)'/) ?? ['', ''])[1];
       const path = '/v1/' + [prefix, sub].filter(Boolean).join('/').replace(/:(\w+)/g, '{$1}');
       const body = lines.slice(i, i + 8).join(' ');
       const roles = pending.filter((d) => d.k === 'Roles').flatMap((d) => d.a.split(',').map((s) => s.trim())).flatMap((r) => r.startsWith('...') ? ROLE_SETS[r.slice(3)] ?? [] : [r.replace(/'/g, '')]).filter(Boolean);
@@ -150,17 +157,17 @@ for (const o of ops.sort((a, b) => a.path.localeCompare(b.path))) {
 const used = [...new Set(ops.map((o) => o.mod))].filter((m) => TAGS[m]);
 const doc = {
   openapi: '3.1.0',
-  info: { title: 'Mapema Platform API (as implemented, Phase 3)', version: '1.3.0-phase3',
+  info: { title: 'Mapema Platform API (as implemented, go-live hardening)', version: '1.4.0-golive',
     description: 'Generated from the NestJS controllers by scripts/gen-openapi.mjs. Money: KES integer cents (strings in JSON). Errors: RFC 9457 problem+json; `title` is a stable error code. All users need MFA; money movements need step-up and maker-checker. Phase 0 design contract: openapi/phase-0-design.yaml (differences are listed in docs/phase-1/README).',
     contact: { name: 'Mapema engineering' }, license: { name: 'Proprietary - Mapema Limited, all rights reserved', identifier: 'LicenseRef-Mapema-Proprietary' } },
-  servers: [{ url: 'https://api.staging.mapema.example', description: 'Staging placeholder (not deployed in Phase 1); locally http://localhost:4000' }],
+  servers: [{ url: 'https://api.staging.mapema.example', description: 'Staging placeholder (not deployed; see docs/go-live/staging-plan.md); locally http://localhost:4000' }],
   security: [{ bearer: [] }, { session: [], csrf: [] }],
   tags: used.map((m) => ({ name: TAGS[m][0], description: TAGS[m][1] })),
   paths,
   components: {
     securitySchemes: {
       bearer: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT', description: 'API clients: OIDC access token (Keycloak in staging/production; dev IdP locally). amr must include an MFA factor. Not ambient, so no CSRF header.' },
-      session: { type: 'apiKey', in: 'cookie', name: 'mapema_sid', description: 'Browser: opaque session id set by POST /v1/auth/session (HttpOnly, Secure, SameSite=Strict). Idle 15 min, absolute 8 h.' },
+      session: { type: 'apiKey', in: 'cookie', name: 'mapema_sid', description: 'Browser: opaque session id set by GET /v1/auth/oidc/callback (BFF) or, in development, POST /v1/auth/session (HttpOnly, Secure, SameSite=Strict). Idle 15 min, absolute 8 h.' },
       csrf: { type: 'apiKey', in: 'header', name: 'X-CSRF-Token', description: 'Required with the session cookie on POST/PUT/PATCH/DELETE, together with an allowed Origin. Value from POST/GET /v1/auth/session.' },
     },
     parameters: { IdempotencyKey: { name: 'Idempotency-Key', in: 'header', required: true, schema: { type: 'string', minLength: 8, maxLength: 128 } } },

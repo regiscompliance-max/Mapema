@@ -17,7 +17,7 @@ export default function Join() {
     const join = { token, displayName: String(f.get('name')), phone: (f.get('phone') as string) || undefined };
     try {
       if (DEV) { await devJoin(String(f.get('email')), f.get('factor') === 'sms' ? 'sms' : 'otp', join); router.push('/app'); }
-      else await oidcSignIn({ join });
+      else await oidcSignIn({ join, returnTo: '/app' });
     } catch (x) { setErr(`${(x as ApiError).code ?? 'ERROR'}: ${(x as Error).message}`); }
   }
   return (

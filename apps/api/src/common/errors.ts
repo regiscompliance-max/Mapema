@@ -5,6 +5,7 @@ import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus, Logge
 import { MoneyError } from '@mapema/pricing';
 import { AdapterError } from '@mapema/adapters';
 import { ZodError } from 'zod';
+import { redactUrl } from './redact';
 
 export class DomainError extends Error {
   constructor(public readonly status: number, public readonly code: string, message: string, public readonly extra?: Record<string, unknown>) {
@@ -47,11 +48,11 @@ export class ProblemFilter implements ExceptionFilter {
       status = 422; code = 'CONSTRAINT'; detail = 'The request breaks a data rule';
       this.log.warn(`constraint: ${(e as any)?.constraint ?? (e as any)?.message}`);
     } else {
-      this.log.error((e as Error)?.stack ?? String(e));
+      this.log.error(`${req?.method ?? ''} ${redactUrl(req?.url) ?? ''} ${(e as Error)?.stack ?? String(e)}`);
     }
     res.status(status).type('application/problem+json').json({
       type: `https://docs.mapema.co.ke/problems/${code.toLowerCase()}`,
-      title: code, status, detail, instance: req?.url, requestId: req?.requestId, ...extra,
+      title: code, status, detail, instance: redactUrl(req?.url), requestId: req?.requestId, ...extra,
     });
   }
 }

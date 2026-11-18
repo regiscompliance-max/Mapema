@@ -3,6 +3,7 @@
  * No secret has a default outside development/test.
  */
 import { z } from 'zod';
+import { ipAllowList } from './redact';
 
 const schema = z.object({
   APP_ENV: z.enum(['development', 'test', 'staging', 'production']).default('development'),
@@ -40,6 +41,14 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   if (parsed.data.APP_ENV === 'production' && parsed.data.DEV_IDP_ENABLED === 'true') {
     throw new Error('DEV_IDP_ENABLED must be false in production');
   }
+  // go-live hardening: fail at start-up, not at the first request
+  const deployed = parsed.data.APP_ENV === 'staging' || parsed.data.APP_ENV === 'production';
+  if (deployed) {
+    if (!/^https:\/\//.test(env.OIDC_REDIRECT_URI ?? '')) throw new Error('OIDC_REDIRECT_URI must be an https URL in staging/production (D-32)');
+    if (!env.OIDC_CLIENT_SECRET || env.OIDC_CLIENT_SECRET.length < 16) throw new Error('OIDC_CLIENT_SECRET (confidential BFF client) is required in staging/production (D-32)');
+    if (!/^https:\/\//.test(parsed.data.OIDC_ISSUER)) throw new Error('OIDC_ISSUER must be https in staging/production');
+  }
+  try { ipAllowList(env.MPESA_CALLBACK_ALLOWED_IPS); } catch (e) { throw new Error(`Invalid configuration: MPESA_CALLBACK_ALLOWED_IPS: ${(e as Error).message}`, { cause: e }); }
   return { ...parsed.data, raw: env };
 }
 

@@ -81,3 +81,20 @@ CEO approved Phase 2 and its defaults Q-A to Q-J as recorded in docs/phase-2/REA
 ## D-64 Phase 3 sign-off (18 Nov 2026, 06:52 GMT)
 
 CEO approved Phase 3 and its defaults Q-K to Q-R as recorded in docs/phase-3/README.md. All four brief phases now signed off; go-live still depends on staging, pen test, provider sandboxes, counsel and tax advice.
+
+### Go-live readiness decisions (18 Nov 2026)
+
+**[Tech Lead + Security Engineer + Compliance + DevOps]** Recorded 18 Nov 2026, about 07:45 GMT (London). Deng's "Next" after D-64 starts go-live readiness on the branch `go-live-hardening` (not merged to main; no PR opened without asking). Working defaults; each can be changed.
+
+| ID | Decision |
+| --- | --- |
+| D-65 | Go-live hardening lives on `go-live-hardening`; CI runs on it. Nothing is deployed, no accounts are opened, no live provider calls are made, and the marketing-site worker is untouched. |
+| D-66 | Business days = Monday to Friday minus Kenyan public holidays: Public Holidays Act (Cap. 110) Schedule Part I as amended by Act No. 3 of 2024 (Mazingira Day 10 Oct), computed in code with the s.4 Sunday rule; Idd-ul-Fitr, election/swearing-in days and any s.3 Gazette additions or substitutions are entered by ops with a Gazette Notice reference and approved by a second ops user (`holiday_gazette`). Part II (Idd-ul-Azha) and Part III (Diwali) are faith-specific and stay business days. Seeded: Idd-ul-Fitr Fri 20 Mar 2026 (Gazette Notice No. 3955 of 18 Mar 2026). Used by the reconciliation timing window and the reminder schedule. |
+| D-67 | Days past due (late ladder, recourse, NPL) keep counting **calendar days** from the contractual due date (counsel to confirm, pack B4). Reminders move to business days: pre-due steps earlier, due/overdue/supplier steps later; nothing is sent on a non-business day; when steps land on the same business day only the latest goes out and the others are recorded as skipped. |
+| D-68 | D-32 closed: sign-in is a server-side OIDC flow (BFF) with a confidential Keycloak client, PKCE, state + nonce, an HttpOnly binding cookie and single-use server-side state. No token reaches the browser. A login whose token lacks an MFA factor (the TOTP-enrolment login) is sent back to Keycloak once with `prompt=login`; a second miss fails closed. |
+| D-69 | Keycloak MFA is codified in `scripts/keycloak-configure.mjs` (amr references `pwd`/`otp` with a max age; OTP REQUIRED for everyone) and must run after every realm import. Proven end to end against Keycloak 26.8.2 (TC-GL-KC-01..04). |
+| D-70 | S-09: report artefacts are sealed in the application with AES-256-GCM (key derived from `STORAGE_ENCRYPTION_KEY`; AAD binds snapshot, template and filename); `sha256` stays the plaintext hash so reproducibility checks still work. Legacy rows are encrypted once by `scripts/encrypt-report-artifacts.mjs`. |
+| D-71 | S-13/S-16 fail closed: ERP egress only to `ERP_ALLOWED_HOSTS` over https, private addresses refused after DNS, no redirects; CSV drop files must be regular, non-symlinked, not world-writable and pass ClamAV; a scanner outage leaves files unprocessed. S-14: integration users carry `is_integration`, can never sign in and are listed separately as service accounts. S-15: each batch item checks the approver's step-up age against `BATCH_STEP_UP_WINDOW_SEC` (default 900 s). S-12: callback token masked in API logs and nginx; a previous token is accepted during rotation and every use audited; optional Safaricom IP allow-list. |
+| D-72 | Staging default: AWS af-south-1 (Cape Town) with synthetic data only, about USD 330/month (estimate). Production region decided after counsel (pack F1) and the CBK outsourcing notice. picomatch GHSA-fc5q-39xc-vjpf: no patched release exists (4.0.7 is the latest and affected); dev-only (vitest/vite), production audit clean; accepted until upstream fixes it. |
+
+**Questions for Deng (defaults apply if no answer):** see docs/go-live/README.md §"Questions for Deng".

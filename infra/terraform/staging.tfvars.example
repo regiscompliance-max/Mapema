@@ -1,0 +1,6 @@
+env                   = "staging"
+region                = "af-south-1"
+db_multi_az           = false
+backup_retention_days = 7
+api_domain            = "api.staging.example.invalid" # placeholder until Deng picks the domain
+alarm_email           = "oncall@example.invalid"      # placeholder; Deng supplies the on-call address

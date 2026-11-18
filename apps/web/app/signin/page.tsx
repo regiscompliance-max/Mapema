@@ -1,14 +1,15 @@
 'use client';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useT } from '@/components/lang';
-import { devSignIn, oidcSignIn } from '@/lib/session';
+import { devSignIn, OIDC_ENABLED, oidcSignIn } from '@/lib/session';
 
 const DEV = process.env.NEXT_PUBLIC_DEV_SIGNIN === 'true';
 
 export default function SignIn() {
   const t = useT(); const router = useRouter();
   const [err, setErr] = useState('');
+  useEffect(() => { const e = signInError(new URLSearchParams(location.search).get('error')); if (e) setErr(e); }, []);
   async function dev(e: FormEvent<HTMLFormElement>) {
     e.preventDefault(); setErr('');
     const f = new FormData(e.currentTarget);
@@ -17,7 +18,8 @@ export default function SignIn() {
   return (
     <div className="mx-auto max-w-md space-y-6">
       <h1 className="h1">{t('signin.title')}</h1>
-      {process.env.NEXT_PUBLIC_OIDC_ISSUER && <button className="btn w-full" onClick={() => oidcSignIn()}>{t('signin.oidc')}</button>}
+      {OIDC_ENABLED && <button className="btn w-full" onClick={() => oidcSignIn().catch((x) => setErr((x as Error).message))}>{t('signin.oidc')}</button>}
+      {err && !DEV && <p role="alert" className="text-red-700">{err}</p>}
       {DEV && (
         <form onSubmit={dev} className="card space-y-4">
           <p className="rounded bg-amber-50 p-2 text-sm">{t('signin.dev')} - not available in production.</p>
@@ -30,4 +32,18 @@ export default function SignIn() {
       )}
     </div>
   );
+}
+
+/** Error codes the API's sign-in callback sends back (never any detail). */
+function signInError(code: string | null): string {
+  if (!code) return '';
+  const known: Record<string, string> = {
+    MFA_REQUIRED: 'Sign-in needs a second factor. Set up your authenticator app and try again.',
+    STRONG_MFA_REQUIRED: 'Staff, buyer and auditor users must use an authenticator app or security key.',
+    NO_ACCOUNT: 'There is no active Mapema account for this sign-in. Ask your administrator for an invitation.',
+    ACCESS_EXPIRED: 'Your time-boxed access has expired.',
+    STEP_UP_REQUIRED: 'Please sign in again to confirm it is you.',
+    ACCESS_DENIED: 'Sign-in was cancelled.',
+  };
+  return known[code] ?? 'Sign-in did not complete. Please try again.';
 }

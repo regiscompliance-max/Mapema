@@ -3,6 +3,7 @@
  * ADAPTER_MODE_<NAME> = mock | sandbox | live. Production refuses mock mode (ADM-08).
  */
 import { ErpRegistry } from './erp';
+import { createScanner } from './scan';
 import { DarajaMpesa, MockMpesa, MpesaAdapter } from './mpesa';
 import { AdapterMode } from './common';
 import { BankAdapter, MockBank, UnconfiguredBank } from './bank';
@@ -75,7 +76,7 @@ export function createAdapters(env: Record<string, string | undefined>): Adapter
     email: emailMode === 'mock' ? new MockEmail() : new PostmarkEmail(emailMode, { serverToken: env.POSTMARK_SERVER_TOKEN ?? '', from: env.EMAIL_FROM ?? 'no-reply@mapema.example' }),
     accounting: accountingMode === 'mock' ? new MockAccounting() : new XeroAccounting(accountingMode, { accessToken: env.XERO_ACCESS_TOKEN ?? '', tenantId: env.XERO_TENANT_ID ?? '' }),
     crm: crmMode === 'mock' ? new MockCrm() : new HubSpotCrm(crmMode, { token: env.HUBSPOT_PRIVATE_APP_TOKEN ?? '', pipelineId: env.HUBSPOT_BUYER_PIPELINE_ID, dealStageId: env.HUBSPOT_BUYER_DEAL_STAGE_ID }),
-    erp: new ErpRegistry(erpMode, env),
+    erp: new ErpRegistry(erpMode, env, fetch, createScanner(env)),
     mpesa: mpesaMode === 'mock' ? new MockMpesa() : new DarajaMpesa(mpesaMode, {
       baseUrl: env.MPESA_BASE_URL ?? 'https://sandbox.safaricom.co.ke', consumerKey: env.MPESA_CONSUMER_KEY ?? '', consumerSecret: env.MPESA_CONSUMER_SECRET ?? '',
       shortcode: env.MPESA_SHORTCODE ?? '', initiatorName: env.MPESA_INITIATOR_NAME ?? '', securityCredential: env.MPESA_SECURITY_CREDENTIAL ?? '',
