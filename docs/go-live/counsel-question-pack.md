@@ -24,6 +24,8 @@ References: Phase 0 compliance review (C-01..C-23) and questions (Q-01..Q-30); P
 | A7 | After the due date: any late charge allowed? | None; discount fee stops at the due date | Q-08 |
 | A8 | "One flat fee" slogan | Replaced; counsel to approve final marketing wording | Q-02 |
 | A9 | Verification fee only on funded advances: compatible with reg. 18(1)(d)? | Yes, only on funded advances, collected at settlement | Q-20 |
+| A10 | **New (bank partnership, 19 Nov 2026):** Under model A (white-label platform: a licensed bank books and funds every advance, pays suppliers from its own accounts and is the secured party on the MPSRA filing; Mapema only provides the technology and verification and earns a platform fee and revenue share), does Mapema itself need NDTCP registration or a licence under the CBK (NDTCP) Regulations 2026? Does onboarding suppliers or a fee share make Mapema a bank agent or payment service provider? What must the bank's CBK outsourcing approval (CBK/PG/16) and the outsourcing agreement contain? | Treat Mapema as the bank's technology service provider, not a lender; lending switch stays off; no customer funds touch Mapema. CEO chose model A on 19 Nov 2026. | Bank partnership plan (model A) |
+| A11 | **New (bank partnership, 19 Nov 2026):** Does the National Treasury MSME Credit Guarantee Scheme (PFM (Credit Guarantee Scheme) Regulations 2020) cover invoice finance / reverse-factoring advances booked by a participating bank (e.g. KCB, Stanbic, Co-op, NCBA, Absa, DTB, Credit Bank), given its KES 5m cap and the rule that two facilities cannot run concurrently? | Assume **no** CGS cover in pilot pricing until counsel and the partner bank confirm. | treasury.go.ke/credit-guarantee-scheme |
 
 ## B. Credit risk, NPLs and collections
 
