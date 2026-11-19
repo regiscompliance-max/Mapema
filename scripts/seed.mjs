@@ -20,6 +20,11 @@
 import pg from 'pg';
 import { migrate } from './migrate.mjs';
 
+function samplePdfB64() {
+  // Minimal valid PDF so seed can upload registry evidence without the API source.
+  return Buffer.from('%PDF-1.4\n1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj\n3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] >>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000068 00000 n \n0000000125 00000 n \ntrailer<< /Size 4 /Root 1 0 R >>\nstartxref\n190\n%%EOF\n').toString('base64');
+}
+
 const STAFF = ['ceo', 'credit', 'credit2', 'ops', 'ops2', 'compliance', 'admin', 'auditor'];
 const env = process.env;
 
@@ -76,6 +81,15 @@ function apiClient(base) {
 
 const addDays = (iso, n) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 864e5).toISOString().slice(0, 10);
 const todayEAT = () => new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10);
+async function recordSearch(a, S, invoiceId, searchedOn) {
+  const existing = await a.get(`/invoices/${invoiceId}/registry-searches`, S('credit'));
+  if ((existing || []).some((s) => s.status === 'approved')) return;
+  const r = await a.post(`/invoices/${invoiceId}/registry-search`, S('credit'), {
+    result: 'clear', notes: 'DEMO portal search clear', searchedOn,
+    fileName: 'registry-search.pdf', mimeType: 'application/pdf', contentBase64: samplePdfB64(),
+  });
+  await a.post(`/approvals/${r.approval.id}/approve`, S('credit2'), { reason: 'seed: checked' });
+}
 
 export async function seedDemoWorld(base, o = {}) {
   const a = apiClient(base);
@@ -99,7 +113,7 @@ export async function seedDemoWorld(base, o = {}) {
   await a.post('/consents', 'ap@acme.test', { orgId: buyer.id, purpose: 'crb_enquiry_and_reporting', textVersion: 'CRB-2026-11' });
   await a.post(`/organisations/${buyer.id}/submit`, 'ap@acme.test');
   await a.post(`/organisations/${buyer.id}/crb-pull`, S('credit'));
-  const prog = await a.post(`/organisations/${buyer.id}/programme`, S('credit'), { limitCents: '500000000', advanceRateBps: 8000, startDate: today, reviewDate: addDays(today, 365), decisionReason: 'DEMO programme' });
+  const prog = await a.post(`/organisations/${buyer.id}/programme`, S('credit'), { limitCents: '500000000', advanceRateBps: 8000, startDate: today, reviewDate: addDays(today, 365), decisionReason: 'DEMO programme', governmentPayerDependent: false });
   await approve(prog.approval.id);
   const pe = await a.post(`/organisations/${buyer.id}/agreements`, 'ap@acme.test');
   await a.post(`/dev/esign/${pe.envelopeId}/complete`);
@@ -123,7 +137,7 @@ export async function seedDemoWorld(base, o = {}) {
   console.log('supplier Jua Kali Packaging Ltd: finance@juakali.test (SMS factor)');
 
   const inv = await a.post('/invoices', 'ap@acme.test', { supplierKraPin: 'P051111111B', invoiceNumber: 'DEMO-INV-0001', amountCents: '100000000', currency: 'KES', issueDate: addDays(today, -2), dueDate: addDays(today, 48), etimsCuInvoiceNo: 'KRACUDEMO0001' });
-  await a.post(`/invoices/${inv.id}/decision`, 'checker@acme.test', { decision: 'approve' });
+  await a.post(`/invoices/${inv.id}/decision`, 'checker@acme.test', { decision: 'approve', goodsReceived: true });
   const conf = await a.post('/confirmations', 'checker@acme.test', { invoiceIds: [inv.id] });
   await a.post(`/dev/esign/${conf.envelopeId}/complete`);
   await a.post('/dev/jobs/run');
@@ -160,7 +174,7 @@ export async function seedDemoMonth(base, month) {
     await approve((await a.post('/reconciliation/baseline', S('ops'), { note: 'DEMO go-live opening balances' })).id, 'ops2');
     const eligible = async (n, cents, due) => {
       const i = await a.post('/invoices', 'ap@acme.test', { supplierKraPin: 'P051111111B', invoiceNumber: n, amountCents: cents, currency: 'KES', issueDate: addDays(Q, -2), dueDate: due, etimsCuInvoiceNo: `KRACU${n.replace(/\W/g, '')}` });
-      await a.post(`/invoices/${i.id}/decision`, 'checker@acme.test', { decision: 'approve' });
+      await a.post(`/invoices/${i.id}/decision`, 'checker@acme.test', { decision: 'approve', goodsReceived: true });
       const conf = await a.post('/confirmations', 'checker@acme.test', { invoiceIds: [i.id] });
       await a.post(`/dev/esign/${conf.envelopeId}/complete`);
       return i.id;
@@ -169,6 +183,7 @@ export async function seedDemoMonth(base, month) {
       const q = await a.post(`/invoices/${invoiceId}/quote`, sup, {}, 'sms');
       const acc = await a.post('/advances', sup, { disclosureIds: [q.disclosureId], acceptTerms: true }, 'sms');
       const id = acc.advances[0].advanceId;
+      await recordSearch(a, S, invoiceId, Q);
       await a.post(`/advances/${id}/decision`, S('credit'), { decision: 'approve', reason: 'DEMO checks green' });
       await a.post(`/advances/${id}/release`, S('ops'));
       return id;
@@ -235,12 +250,13 @@ export async function seedDemoGrowth(base) {
   await a.post('/dev/mpesa/fund', undefined, { amountCents: '100000000', reference: 'MPFLOAT-DEMO-1', valueDate: today });
   await a.post('/funding', S('ceo'), { amountCents: '100000000', source: 'DEMO M-Pesa float top-up', reference: 'MPFLOAT-DEMO-1', valueDate: today });
   const small = await a.post('/invoices', 'ap@acme.test', { supplierKraPin: 'P051111111B', invoiceNumber: 'DEMO-INV-MP1', amountCents: '12500000', currency: 'KES', issueDate: addDays(today, -3), dueDate: addDays(today, 30), etimsCuInvoiceNo: 'KRACUDEMOMP1' });
-  await a.post(`/invoices/${small.id}/decision`, 'checker@acme.test', { decision: 'approve' });
+  await a.post(`/invoices/${small.id}/decision`, 'checker@acme.test', { decision: 'approve', goodsReceived: true });
   const sc = await a.post('/confirmations', 'checker@acme.test', { invoiceIds: [small.id] });
   await a.post(`/dev/esign/${sc.envelopeId}/complete`);
   const q = await a.post(`/invoices/${small.id}/quote`, sup, {}, 'sms');
   const acc = await a.post('/advances', sup, { disclosureIds: [q.disclosureId], acceptTerms: true }, 'sms');
   const mpAdv = acc.advances[0].advanceId;
+  await recordSearch(a, S, small.id, today);
   await a.post(`/advances/${mpAdv}/decision`, S('credit'), { decision: 'approve', reason: 'DEMO checks green' });
   await a.post(`/advances/${mpAdv}/release`, S('ops'));
   const mp = (await a.get('/mpesa/payouts', S('ops')))[0];
@@ -249,11 +265,12 @@ export async function seedDemoGrowth(base) {
 
   // bulk: checker confirms the ERP invoices, supplier quotes + accepts in bulk, credit approves, ops builds a batch
   const pending = (await a.get('/invoices?status=awaiting_confirmation', 'checker@acme.test')).map((i) => i.id);
-  await a.post('/invoices/bulk-decision', 'checker@acme.test', { invoiceIds: pending, decision: 'approve' });
+  await a.post('/invoices/bulk-decision', 'checker@acme.test', { invoiceIds: pending, decision: 'approve', goodsReceived: true });
   const bc = await a.post('/confirmations', 'checker@acme.test', { invoiceIds: pending });
   await a.post(`/dev/esign/${bc.envelopeId}/complete`);
   const bq = await a.post('/invoices/bulk-quote', sup, { invoiceIds: pending }, 'sms');
   const ba = await a.post('/advances', sup, { disclosureIds: bq.results.filter((r) => r.status === 'ok').map((r) => r.quote.disclosureId), acceptTerms: true }, 'sms');
+  for (const id of pending) await recordSearch(a, S, id, today);
   for (const x of ba.advances) await a.post(`/advances/${x.advanceId}/decision`, S('credit'), { decision: 'approve', reason: 'DEMO checks green' });
   await a.post('/payout-batches', S('ops'), { advanceIds: ba.advances.map((x) => x.advanceId), note: 'DEMO ERP batch' });
   await a.post('/dev/jobs/run');

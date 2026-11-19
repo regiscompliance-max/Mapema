@@ -156,7 +156,9 @@ export class OnboardingService implements OnModuleInit {
     const exposure = await this.db.one(`SELECT COALESCE(SUM(exposure_cents),0)::bigint AS buyer_exposure FROM v_exposure WHERE buyer_id = $1`, [id]);
     const supExposure = await this.db.one(`SELECT COALESCE(SUM(exposure_cents),0)::bigint AS supplier_exposure FROM v_exposure WHERE supplier_id = $1`, [id]);
     const aml = await this.db.query(`SELECT * FROM aml_flag WHERE org_id = $1`, [id]);
-    return { kycChecks: kyc, creditChecks: crb, documents: docs, consents, exposure: { buyerCents: toCents(exposure.buyer_exposure), supplierCents: toCents(supExposure.supplier_exposure) }, amlFlags: aml };
+    const org = await this.db.one(`SELECT o.government_payer_dependent, o.government_payer_note, o.government_payer_set_at, s.code AS sector_code, o.type FROM organisation o LEFT JOIN sector s ON s.id = o.sector_id WHERE o.id = $1`, [id]);
+    return { kycChecks: kyc, creditChecks: crb, documents: docs, consents, exposure: { buyerCents: toCents(exposure.buyer_exposure), supplierCents: toCents(supExposure.supplier_exposure) }, amlFlags: aml,
+      governmentPayerDependent: org?.government_payer_dependent ?? null, governmentPayerNote: org?.government_payer_note ?? null, governmentPayerSetAt: org?.government_payer_set_at ?? null, sectorCode: org?.sector_code ?? null, orgType: org?.type };
   }
 
   async updateKyb(u: AuthUser, id: string, b: { tradingName?: string; address?: Record<string, string>; sectorCode?: string }) {
@@ -393,13 +395,36 @@ export class OnboardingService implements OnModuleInit {
   }
 
   // ------------------------------------------------------------------ programmes & limits
-  async proposeProgramme(u: AuthUser, buyerId: string, b: { limitCents: bigint; advanceRateBps: number; startDate: string; reviewDate: string; decisionReason: string }) {
+
+  async setGovernmentPayer(u: AuthUser, buyerId: string, b: { dependent: boolean; note?: string }) {
+    return this.db.tx(async (c) => {
+      const org = (await c.query(`SELECT o.*, s.code AS sector_code FROM organisation o LEFT JOIN sector s ON s.id = o.sector_id WHERE o.id = $1 AND o.type = 'buyer'`, [buyerId])).rows[0];
+      if (!org) throw notFound('Buyer');
+      const note = (b.note ?? '').trim();
+      if ((b.dependent || org.sector_code === 'CONS') && note.length < 3) {
+        throw unprocessable('GOVERNMENT_PAYER_NOTE_REQUIRED', 'A comment is required when the buyer is government-payer dependent or in construction');
+      }
+      const after = (await c.query(`UPDATE organisation SET government_payer_dependent = $2, government_payer_note = $3, government_payer_set_by = $4, government_payer_set_at = now() WHERE id = $1 RETURNING government_payer_dependent, government_payer_note, government_payer_set_at`,
+        [buyerId, b.dependent, note || null, u.id])).rows[0];
+      await this.audit.record(c, u.actor, 'organisation.government_payer.set', 'organisation', buyerId, { government_payer_dependent: org.government_payer_dependent }, after);
+      return after;
+    });
+  }
+
+  async proposeProgramme(u: AuthUser, buyerId: string, b: { limitCents: bigint; advanceRateBps: number; startDate: string; reviewDate: string; decisionReason: string; governmentPayerDependent: boolean; governmentPayerNote?: string }) {
     const pricing = await this.settings.activePricing();
     if (!pricing) throw unprocessable('NO_ACTIVE_PRICING', 'No active pricing version with a CBK approval reference');
     if (b.advanceRateBps > pricing.advance_rate_bps) throw unprocessable('ADVANCE_RATE_TOO_HIGH', `Advance rate cannot exceed the pricing version (${pricing.advance_rate_bps} bps)`);
     return this.db.tx(async (c) => {
-      const org = (await c.query(`SELECT * FROM organisation WHERE id = $1 AND type = 'buyer'`, [buyerId])).rows[0];
+      const org = (await c.query(`SELECT o.*, s.code AS sector_code FROM organisation o LEFT JOIN sector s ON s.id = o.sector_id WHERE o.id = $1 AND o.type = 'buyer'`, [buyerId])).rows[0];
       if (!org) throw notFound('Buyer');
+      if (typeof b.governmentPayerDependent !== 'boolean') throw unprocessable('GOVERNMENT_PAYER_REQUIRED', 'Record whether this buyer depends on a government payer before proposing a programme');
+      const note = (b.governmentPayerNote ?? org.government_payer_note ?? '').trim();
+      if ((b.governmentPayerDependent || org.sector_code === 'CONS') && note.length < 3) {
+        throw unprocessable('GOVERNMENT_PAYER_NOTE_REQUIRED', 'A comment is required when the buyer is government-payer dependent or in construction');
+      }
+      await c.query(`UPDATE organisation SET government_payer_dependent = $2, government_payer_note = $3, government_payer_set_by = $4, government_payer_set_at = now() WHERE id = $1`,
+        [buyerId, b.governmentPayerDependent, note || null, u.id]);
       const crb = (await c.query(`SELECT id FROM credit_check WHERE subject_org_id = $1`, [buyerId])).rows[0];
       if (!crb) throw unprocessable('CRB_REQUIRED', 'Pull a CRB report before proposing a limit');
       const p = (await c.query(
@@ -556,10 +581,18 @@ export class OnboardingController {
     return this.s.pullCrb(u, zOrgId.parse(id));
   }
 
+  @Post('organisations/:id/government-payer')
+  @Roles('credit', 'ceo')
+  governmentPayer(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() b: unknown) {
+    const body = z.object({ dependent: z.boolean(), note: z.string().max(2000).optional() }).parse(b);
+    return this.s.setGovernmentPayer(u, zOrgId.parse(id), body);
+  }
+
   @Post('organisations/:id/programme')
   @Roles('credit')
   programme(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() b: unknown) {
-    const body = z.object({ limitCents: zPositiveCents, advanceRateBps: z.number().int().min(1).max(10000), startDate: zDate, reviewDate: zDate, decisionReason: zText(1000) }).parse(b);
+    const body = z.object({ limitCents: zPositiveCents, advanceRateBps: z.number().int().min(1).max(10000), startDate: zDate, reviewDate: zDate, decisionReason: zText(1000),
+      governmentPayerDependent: z.boolean(), governmentPayerNote: z.string().max(2000).optional() }).parse(b);
     return this.s.proposeProgramme(u, zOrgId.parse(id), body);
   }
 

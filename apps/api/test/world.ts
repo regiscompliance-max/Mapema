@@ -6,6 +6,7 @@
  */
 import { addDays, todayEAT } from '@mapema/pricing';
 import { client, Harness } from './harness';
+import { simplePdf } from '../src/modules/documents';
 
 /** Real Fineract rejects future-dated transactions, so the real-ledger run uses past dates. */
 export const REAL_LEDGER = process.env.E2E_LEDGER === 'fineract';
@@ -53,7 +54,7 @@ export async function buildWorld(h: Harness, o: { floatCents?: bigint; supplierL
   await w.buyerAdmin.post('/consents', { orgId: buyer.id, purpose: 'crb_enquiry_and_reporting', textVersion: 'CRB-2026-11' });
   await w.buyerAdmin.post(`/organisations/${buyer.id}/submit`);
   await w.credit!.post(`/organisations/${buyer.id}/crb-pull`);
-  const prog = await w.credit!.post(`/organisations/${buyer.id}/programme`, { limitCents: '500000000', advanceRateBps: 8000, startDate: WORKED.issueDate, reviewDate: addDays(WORKED.quoteDate, 600), decisionReason: 'Strong CRB, 10y trading' });
+  const prog = await w.credit!.post(`/organisations/${buyer.id}/programme`, { limitCents: '500000000', advanceRateBps: 8000, startDate: WORKED.issueDate, reviewDate: addDays(WORKED.quoteDate, 600), decisionReason: 'Strong CRB, 10y trading', governmentPayerDependent: false });
   await w.approve(prog.approval.id);
   const pe = await w.buyerAdmin.post(`/organisations/${buyer.id}/agreements`);
   await h.http.post(`/v1/dev/esign/${pe.envelopeId}/complete`).expect(201);
@@ -86,11 +87,35 @@ export async function buildWorld(h: Harness, o: { floatCents?: bigint; supplierL
   return w as World;
 }
 
+
+/** Minimal PDF evidence for registry maker-checker uploads (tests only). */
+export function samplePdfB64(title = 'Registry search certificate'): string {
+  return simplePdf(title, ['Uploaded from the MPSRA portal (test evidence).', 'DRAFT / TEST']).toString('base64');
+}
+
+/** Record a clear (or waived/conflict) registry search and have a second credit officer approve it (D-73). Idempotent if already approved. */
+export async function recordRegistrySearch(w: World, invoiceId: string, result: 'clear' | 'conflict' | 'conflict_waived' = 'clear', notes?: string) {
+  const existing = await w.credit.get(`/invoices/${invoiceId}/registry-searches`);
+  const approved = Array.isArray(existing) ? existing.find((s: any) => s.status === 'approved') : null;
+  if (approved) return { search: approved, approval: null };
+  const pending = Array.isArray(existing) ? existing.find((s: any) => s.status === 'pending') : null;
+  if (pending?.proposed_via) {
+    await w.approve(pending.proposed_via, w.credit2);
+    return { search: pending, approval: { id: pending.proposed_via } };
+  }
+  const r = await w.credit.post(`/invoices/${invoiceId}/registry-search`, {
+    result, notes: notes ?? (result === 'conflict_waived' ? 'Prior filing reviewed and waived' : 'Portal search clear'),
+    searchedOn: WORKED.quoteDate, fileName: 'registry-search.pdf', mimeType: 'application/pdf', contentBase64: samplePdfB64(),
+  });
+  await w.approve(r.approval.id, w.credit2);
+  return r;
+}
+
 /** BUY-04/05 + ILU: an eligible invoice. */
 export async function eligibleInvoice(h: Harness, w: World, inv: { number: string; amountCents: bigint; issueDate?: string; dueDate: string }) {
   const i = await w.buyerAdmin.post('/invoices', { supplierKraPin: w.supplierKraPin, invoiceNumber: inv.number, amountCents: String(inv.amountCents), currency: 'KES',
     issueDate: inv.issueDate ?? WORKED.issueDate, dueDate: inv.dueDate, etimsCuInvoiceNo: `KRACU${inv.number.replace(/\W/g, '')}` });
-  await w.buyerChecker.post(`/invoices/${i.id}/decision`, { decision: 'approve' });
+  await w.buyerChecker.post(`/invoices/${i.id}/decision`, { decision: 'approve', goodsReceived: true });
   const conf = await w.buyerChecker.post('/confirmations', { invoiceIds: [i.id] });
   await h.http.post(`/v1/dev/esign/${conf.envelopeId}/complete`).expect(201);
   return i.id as string;
@@ -101,6 +126,7 @@ export async function fund(h: Harness, w: World, invoiceId: string) {
   const q = await w.supplier.post(`/invoices/${invoiceId}/quote`);
   const acc = await w.supplier.post('/advances', { disclosureIds: [q.disclosureId], acceptTerms: true }, undefined, { 'Idempotency-Key': `accept-${invoiceId}` });
   const advanceId = acc.advances[0].advanceId as string;
+  await recordRegistrySearch(w, invoiceId);
   await w.credit.post(`/advances/${advanceId}/decision`, { decision: 'approve', reason: 'All checks green' });
   const rel = await w.ops.post(`/advances/${advanceId}/release`, undefined, undefined, { 'Idempotency-Key': `release-${advanceId}` });
   return { quote: q, advanceId, release: rel };

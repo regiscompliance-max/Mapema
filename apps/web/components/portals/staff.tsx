@@ -8,6 +8,7 @@ import { Field } from '../shared';
 import { CollectionsBook, ReconBreaks, Reports, StaffOverview } from './phase2';
 import { ErpConnections, FundingSources, MpesaPanel, PayoutBatches } from './phase3';
 import { CreditFile, DsrPanel, LimitsFloat, ReviewTasks, Shortfalls, StaffAdmin, WriteOffs } from './staff-extra';
+import { RegistryFilingQueue, RegistrySearchForm } from './phase4';
 
 export function StaffPortal({ roles }: { roles: string[] }) {
   const t = useT();
@@ -68,15 +69,26 @@ function Advances({ canCredit, canOps }: { canCredit: boolean; canOps: boolean }
   const { busy, msg, run } = useAction();
   const checks = (r: any) => <ul className="text-xs">{r.checks?.map((c: any) => <li key={c.code} className={c.ok ? 'text-green-700' : 'text-red-700'}>{c.ok ? '✓' : '✗'} {c.code}: {c.detail}</li>)}</ul>;
   const reload = () => { void requested.reload(); void approved.reload(); };
+  const actions = (r: any) => {
+    const blocked = r.checks?.some((c: any) => !c.ok);
+    return (
+      <div className="space-y-2">
+        {(r.checks?.some((c: any) => ['REGISTRY_SEARCH', 'ETIMS_VALID'].includes(c.code) && !c.ok)) && <RegistrySearchForm invoiceId={r.invoice_id} checks={r.checks} onDone={reload} />}
+        {canCredit && !blocked && <span className="flex gap-2"><button className="btn !min-h-10 !py-2" disabled={busy} onClick={() => run(() => api(`/advances/${r.id}/decision`, { body: { decision: 'approve', reason: 'Checks green' } }), 'Approved').then(reload)}>Approve</button>
+          <button className="btn-secondary !min-h-10 !py-2" onClick={() => run(() => api(`/advances/${r.id}/decision`, { body: { decision: 'decline', reason: prompt('Reason') ?? 'declined' } }), 'Declined').then(reload)}>Decline</button></span>}
+        {canCredit && blocked && <button className="btn-secondary !min-h-10 !py-2" onClick={() => run(() => api(`/advances/${r.id}/decision`, { body: { decision: 'decline', reason: prompt('Reason') ?? 'declined' } }), 'Declined').then(reload)}>Decline</button>}
+      </div>
+    );
+  };
   return (
     <div className="space-y-6"><Msg msg={msg} />
       <h2 className="h2">Requested (credit decision)</h2>
       <Table rows={requested.data} cols={[{ key: 'invoice_number', label: 'Invoice' }, { key: 'supplier_name', label: 'Supplier' }, { key: 'buyer_name', label: 'Buyer' }, { key: 'principal_cents', label: 'Advance', money: true }, { key: 'c', label: 'Checks', render: checks },
-        { key: 'x', label: '', render: (r) => canCredit ? <span className="flex gap-2"><button className="btn !min-h-10 !py-2" disabled={busy} onClick={() => run(() => api(`/advances/${r.id}/decision`, { body: { decision: 'approve', reason: 'Checks green' } }), 'Approved').then(reload)}>Approve</button>
-          <button className="btn-secondary !min-h-10 !py-2" onClick={() => run(() => api(`/advances/${r.id}/decision`, { body: { decision: 'decline', reason: prompt('Reason') ?? 'declined' } }), 'Declined').then(reload)}>Decline</button></span> : null }]} />
+        { key: 'x', label: '', render: actions }]} />
       <h2 className="h2">Approved (ops release - a different person)</h2>
       <Table rows={approved.data} cols={[{ key: 'invoice_number', label: 'Invoice' }, { key: 'supplier_name', label: 'Supplier' }, { key: 'principal_cents', label: 'Advance', money: true }, { key: 'c', label: 'Checks now', render: checks },
         { key: 'x', label: '', render: (r) => canOps ? <button className="btn !min-h-10 !py-2" disabled={busy} onClick={() => run(() => api(`/advances/${r.id}/release`, { idempotencyKey: newIdempotencyKey(), body: {} }), 'Released').then(reload)}>Release payment</button> : null }]} />
+      <RegistryFilingQueue canOps={canOps} />
     </div>
   );
 }

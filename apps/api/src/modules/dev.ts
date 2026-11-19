@@ -139,7 +139,12 @@ export class DevController {
 
   @Post('dev/jobs/run')
   async jobs() {
-    const outbox = await this.outbox.processDue(100);
+    let outbox = 0;
+    for (let i = 0; i < 20; i++) {
+      const n = await this.outbox.processDue(100);
+      outbox += n;
+      if (!n) break;
+    }
     const held = await this.payments.postHeld();
     const ladder = await this.collections.runDaily();
     const payouts = await this.advances.refreshPayoutStatuses();

@@ -16,3 +16,4 @@ export * from './erp';
 export * from './egress';
 export * from './scan';
 export * from './mpesa';
+export * from './registry';

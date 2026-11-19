@@ -89,3 +89,17 @@ References: Phase 0 compliance review (C-01..C-23) and questions (Q-01..Q-30); P
 | --- | --- | --- | --- |
 | H1 | Confirm the business-day calendar: Public Holidays Act (Cap. 110) Schedule Part I as amended by Act No. 3 of 2024 (Mazingira Day 10 Oct), s.4 Sunday rule, s.3 gazetted additions/substitutions, s.2(4)–(5) election and swearing-in days. Part II (Idd-ul-Azha) and Part III (Diwali) are treated as **business days** because they apply to Muslims / Hindus only. Correct for a lender's settlement and notice periods? | As stated; ops adds gazetted days with maker-checker | D-66 |
 | H2 | Contract wording: "business day" definition in the master agreement and buyer programme agreement to match the calendar | Draft clause: "a day other than a Saturday, Sunday or public holiday in Kenya under the Public Holidays Act" | D-66 |
+
+
+## I. Phase 4 security (MPSRA, assignment, factoring, CRB) — added 18 Nov 2026 after CEO sign-off of D-73 to D-80
+
+Do **not** change contract templates until these are answered (D-76). Defaults in the right-hand column are how the platform proceeds in the meantime.
+
+| # | Question | Default | Source |
+| --- | --- | --- | --- |
+| I1 | Confirm the practical filing path at the Office of the Registrar of Security Rights under the Movable Property Security Rights Act, 2017: who files (Mapema or the supplier), what evidence we should keep, and how long a search certificate remains reliable before funding. | Search before funding, file after, store the registration number, fail closed if the search is missing. Manual portal evidence, maker-checker. No invented API. | D-73, IFC 2022 pp.7–8, 11; Q-S, Q-T |
+| I2 | How does a perfected MPSRA filing of an assigned receivable rank against other creditors, especially in insolvency? Has the Insolvency Act been harmonised with MPSRA since IFC 2022 noted the gap? | Proceed on MPSRA + notice of assignment + ILU; counsel to confirm priority. Do not rely on the pre-2017 FSD 2013 finding that “invoices cannot be sold”. | D-76, IFC 2022 p.11; FSD 2013 p.6 (historical) |
+| I3 | Anti-assignment clauses in buyer–supplier contracts: can they defeat an assignment to Mapema, and should the buyer programme agreement and supplier master agreement address them expressly? | Current drafts already assign financed invoices in full; add specific anti-assignment language only after counsel drafts it. | D-76, Q-X |
+| I4 | Is the small-claims path appropriate for residual supplier balances or buyer shortfalls, and up to what amount? Any specialist recovery forum for assigned receivables? | Keep the current collections ladder and recourse; do not advertise a small-claims path until counsel confirms. | D-76, Q-Y |
+| I5 | Has a Kenyan factoring Act, or any amendment that changes the treatment of invoice assignment or a receivables registry, been enacted since the IFC 2022 assessment? If yes, what must Mapema change? | Proceed on MPSRA 2017 + assignment documents until counsel confirms otherwise. | D-76, Q-Z, IFC 2022 |
+| I6 | FSD 2013 p.6 suggested a CRB file should include both buyer and supplier. May we add the buyer as a reported party, or must the supplier remain the only borrower on the assumed-layout file? | **No CRB change** until counsel answers (D-80, D-38, D-45). | D-80, Q-W, FSD 2013 p.6 |

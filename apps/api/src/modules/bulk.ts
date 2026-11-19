@@ -44,10 +44,10 @@ export class BulkService {
   nowSec: () => number = () => Math.floor(Date.now() / 1000);
   private windowSec() { return Math.max(60, Number(this.cfg.raw.BATCH_STEP_UP_WINDOW_SEC ?? 900)); }
 
-  async bulkDecision(u: AuthUser, ids: string[], decision: 'approve' | 'reject', reasonCode?: string, reasonText?: string) {
+  async bulkDecision(u: AuthUser, ids: string[], decision: 'approve' | 'reject', reasonCode?: string, reasonText?: string, att?: { goodsReceived?: boolean; goodsReceivedNote?: string; poReference?: string }) {
     const results = [];
     for (const id of ids) {
-      try { const r: any = await this.invoices.decide(u, id, decision, reasonCode, reasonText); results.push({ invoiceId: id, status: 'ok', newStatus: r?.status ?? (decision === 'approve' ? 'confirmed' : 'rejected') }); }
+      try { const r: any = await this.invoices.decide(u, id, decision, reasonCode, reasonText, att); results.push({ invoiceId: id, status: 'ok', newStatus: r?.status ?? (decision === 'approve' ? 'confirmed' : 'rejected') }); }
       catch (e) { results.push({ invoiceId: id, status: 'error', ...err(e) }); }
     }
     return { decision, ok: results.filter((r) => r.status === 'ok').length, failed: results.filter((r) => r.status === 'error').length, results };
@@ -167,9 +167,10 @@ export class BulkController {
 
   @Post('invoices/bulk-decision') @Roles('buyer_checker')
   decision(@CurrentUser() u: AuthUser, @Body() b: unknown) {
-    const body = z.object({ invoiceIds: z.array(zUuid).min(1).max(200), decision: z.enum(['approve', 'reject']), reasonCode: z.string().max(40).optional(), reasonText: z.string().max(500).optional() }).parse(b);
+    const body = z.object({ invoiceIds: z.array(zUuid).min(1).max(200), decision: z.enum(['approve', 'reject']), reasonCode: z.string().max(40).optional(), reasonText: z.string().max(500).optional(),
+      goodsReceived: z.boolean().optional(), goodsReceivedNote: z.string().max(500).optional(), poReference: z.string().max(60).optional() }).parse(b);
     if (body.decision === 'reject' && !body.reasonCode) throw badRequest('REASON_REQUIRED', 'A rejection needs a reason code');
-    return this.s.bulkDecision(u, body.invoiceIds, body.decision, body.reasonCode, body.reasonText);
+    return this.s.bulkDecision(u, body.invoiceIds, body.decision, body.reasonCode, body.reasonText, { goodsReceived: body.goodsReceived, goodsReceivedNote: body.goodsReceivedNote, poReference: body.poReference });
   }
 
   @Post('invoices/bulk-quote') @Roles('supplier_admin', 'supplier_user')

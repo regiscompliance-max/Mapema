@@ -16,6 +16,7 @@ import { AccountingAdapter, MockAccounting, XeroAccounting } from './accounting'
 import { CrmAdapter, HubSpotCrm, MockCrm } from './crm';
 import { D1SiteLeadSource, LeadSourceAdapter, MockSiteLeadSource } from './leads';
 import { CrbAdapter, EtimsAdapter, KycAdapter, MockCrb, MockEtims, MockKyc, UnconfiguredCrb, UnconfiguredEtims, UnconfiguredKyc } from './verification';
+import { ManualRegistry, MockRegistry, Registry } from './registry';
 
 export interface Adapters {
   ledger: LedgerAdapter;
@@ -31,6 +32,7 @@ export interface Adapters {
   leads: LeadSourceAdapter;
   erp: ErpRegistry;
   mpesa: MpesaAdapter;
+  registry: Registry;
 }
 
 function mode(env: Record<string, string | undefined>, name: string): AdapterMode {
@@ -64,6 +66,7 @@ export function createAdapters(env: Record<string, string | undefined>): Adapter
   const leadsMode = mode(env, 'SITE_LEADS');
   const erpMode = mode(env, 'ERP');
   const mpesaMode = mode(env, 'MPESA');
+  const registryMode = mode(env, 'REGISTRY');
   const cb = (env.MPESA_CALLBACK_BASE_URL ?? '').replace(/\/$/, '');
   return {
     ledger,
@@ -83,5 +86,6 @@ export function createAdapters(env: Record<string, string | undefined>): Adapter
       resultUrl: `${cb}/v1/webhooks/mpesa/b2c/result/${env.MPESA_CALLBACK_TOKEN ?? ''}`, timeoutUrl: `${cb}/v1/webhooks/mpesa/b2c/timeout/${env.MPESA_CALLBACK_TOKEN ?? ''}`,
     }),
     leads: leadsMode === 'mock' ? new MockSiteLeadSource() : new D1SiteLeadSource(leadsMode, { accountId: env.SITE_D1_ACCOUNT_ID ?? '', databaseId: env.SITE_D1_DATABASE_ID ?? '', token: env.SITE_D1_API_TOKEN ?? '' }),
+    registry: registryMode === 'mock' ? new MockRegistry() : new ManualRegistry(registryMode),
   };
 }

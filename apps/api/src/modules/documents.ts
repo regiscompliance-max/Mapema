@@ -12,7 +12,7 @@ import { unprocessable } from '../common/errors';
 const MIME_ALLOW = new Set(['application/pdf', 'image/jpeg', 'image/png', 'text/csv', 'text/plain']);
 const MAX_BYTES = 10 * 1024 * 1024;
 const EICAR = 'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*';
-const WORM_TYPES = new Set(['programme_agreement', 'master_agreement', 'deed_of_assignment', 'ilu', 'notice_of_assignment', 'receipt', 'cbk_approval_letter', 'credit_report']);
+const WORM_TYPES = new Set(['programme_agreement', 'master_agreement', 'deed_of_assignment', 'ilu', 'notice_of_assignment', 'receipt', 'cbk_approval_letter', 'credit_report', 'registry_search_certificate', 'registry_filing_evidence']);
 
 /** Magic-byte sniffing so the declared MIME type can't lie. */
 function sniff(body: Buffer): string | null {

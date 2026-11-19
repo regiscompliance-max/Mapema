@@ -67,3 +67,12 @@ export function stableHash(s: string): number {
   }
   return h >>> 0;
 }
+
+export interface RegistrySearch {
+  registrationNo?: string;
+  result: 'clear' | 'conflict' | 'unavailable';
+}
+export interface RegistryFiling {
+  registrationNo: string;
+  filedOn: string;
+}

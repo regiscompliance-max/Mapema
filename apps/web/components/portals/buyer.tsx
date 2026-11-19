@@ -81,13 +81,24 @@ function Confirm() {
   const { busy, msg, run } = useAction();
   const onHold = useGet<any[]>('/invoices?status=on_hold');
   const decide = (id: string, decision: string) => {
-    const body = decision === 'reject' ? { decision, reasonCode: 'not_recognised', reasonText: prompt('Why are you rejecting this invoice?') ?? undefined }
-      : decision === 'hold' ? { decision, reasonText: prompt('Why are you holding this invoice? (e.g. goods being checked)') ?? undefined } : { decision };
+    let body: Record<string, unknown>;
+    if (decision === 'reject') body = { decision, reasonCode: 'not_recognised', reasonText: prompt('Why are you rejecting this invoice?') ?? undefined };
+    else if (decision === 'hold') body = { decision, reasonText: prompt('Why are you holding this invoice? (e.g. goods being checked)') ?? undefined };
+    else if (decision === 'approve') {
+      const received = window.confirm('Have the goods or services been received?\nOK = yes. Cancel = confirming without receipt (you will be asked for a reason, for example a contractual milestone).');
+      let goodsReceivedNote: string | undefined;
+      if (!received) {
+        goodsReceivedNote = prompt('Why are you confirming without receipt? (for example a contractual milestone)') ?? '';
+        if (!goodsReceivedNote.trim()) return;
+      }
+      const po = prompt('Purchase order or GRN reference (optional)') || undefined;
+      body = { decision, goodsReceived: received, goodsReceivedNote, poReference: po };
+    } else body = { decision };
     const done: Record<string, string> = { approve: 'Approved', reject: 'Rejected', hold: 'On hold - the supplier cannot be paid early until you release it', release_hold: 'Hold released' };
     return run(() => api(`/invoices/${id}/decision`, { body }), done[decision]).then(() => { void pending.reload(); void confirmed.reload(); void onHold.reload(); });
   };
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-story="P4-5">
       <Msg msg={msg} />
       <h2 className="h2">Waiting for your confirmation</h2>
       <Table rows={pending.data} cols={[{ key: 'invoice_number', label: 'Invoice' }, { key: 'amount_cents', label: 'Amount', money: true }, { key: 'due_date', label: 'Due' }, { key: 'etims_status', label: 'eTIMS' },

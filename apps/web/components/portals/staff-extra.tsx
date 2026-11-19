@@ -4,6 +4,7 @@ import { FormEvent, useState } from 'react';
 import { api } from '@/lib/api';
 import { kesFromCents, parseKesInput } from '@/lib/money';
 import { Documents, Field, Shortfalls } from '../shared';
+import { GovernmentPayerFields } from './phase4';
 import { Msg, StatusPill, Table, useAction, useGet } from '../ui';
 
 const day = (v: unknown) => (v ? String(v).slice(0, 10) : '-');
@@ -21,7 +22,7 @@ export function CreditFile({ orgId, onClose, canCredit }: { orgId: string; onClo
     const cents = parseKesInput(v.limit); const rate = Math.round(Number(v.rate) * 100);
     void run(async () => {
       if (cents === null) throw Object.assign(new Error('Enter the limit in KES'), { code: 'BAD_AMOUNT' });
-      await api(`/organisations/${orgId}/programme`, { body: { limitCents: cents.toString(), advanceRateBps: rate, startDate: v.start, reviewDate: v.review, decisionReason: v.reason } });
+      await api(`/organisations/${orgId}/programme`, { body: { limitCents: cents.toString(), advanceRateBps: rate, startDate: v.start, reviewDate: v.review, decisionReason: v.reason, governmentPayerDependent: Boolean(v.govdep), governmentPayerNote: v.govnote || undefined } });
     }, 'Programme proposed - the CEO must approve').then(org.reload);
   };
   const setLimit = (linkId: string, buyerName: string) => run(async () => {
@@ -37,6 +38,7 @@ export function CreditFile({ orgId, onClose, canCredit }: { orgId: string; onClo
         <p>Type: <strong>{o.type}</strong></p><p>Status: <StatusPill s={o.status} /></p><p>KRA PIN: {o.kra_pin}</p><p>Registration: {o.registration_no}</p>
         {f && <p>Exposure: {kesFromCents(buyer ? f.exposure.buyerCents : f.exposure.supplierCents)}</p>}
         {buyer && o.programme && <p>Programme: {kesFromCents(o.programme.limit_cents)} · {o.programme.status} · review {day(o.programme.review_date)}</p>}
+        {buyer && <p data-story="P4-8">Government-payer dependent: <strong>{f?.governmentPayerDependent === true ? 'yes' : f?.governmentPayerDependent === false ? 'no' : 'not recorded'}</strong>{f?.governmentPayerNote ? ` — ${f.governmentPayerNote}` : ''}{f?.sectorCode === 'CONS' ? ' (construction)' : ''}</p>}
       </div>}
       <Msg msg={msg} />
       {canCredit && <button className="btn" disabled={busy} onClick={() => run(() => api(`/organisations/${orgId}/crb-pull`, { body: {} }), 'CRB report pulled').then(file.reload)}>Pull CRB report</button>}
@@ -55,6 +57,7 @@ export function CreditFile({ orgId, onClose, canCredit }: { orgId: string; onClo
           <Field label="Start date"><input name="start" required type="date" className="input" /></Field>
           <Field label="Review date"><input name="review" required type="date" className="input" /></Field>
           <Field label="Decision reason" className="sm:col-span-2"><textarea name="reason" required rows={3} className="input" /></Field>
+          <GovernmentPayerFields />
           <button className="btn sm:col-span-2" disabled={busy}>Propose programme</button>
         </form>
       )}

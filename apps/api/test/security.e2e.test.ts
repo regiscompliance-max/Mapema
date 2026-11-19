@@ -10,7 +10,7 @@ import { addDays } from '@mapema/pricing';
 import { createAdapters } from '@mapema/adapters';
 import { loadConfig } from '../src/common/config';
 import { client, Harness, startHarness } from './harness';
-import { AT, buildWorld, eligibleInvoice, seedFunding, World, WORKED } from './world';
+import { AT, buildWorld, eligibleInvoice, recordRegistrySearch, seedFunding, World, WORKED } from './world';
 
 let h: Harness; let w: World;
 beforeAll(async () => { h = await startHarness(); w = await buildWorld(h, { supplierLimitCents: 200_000_000n }); await seedFunding(h, w, 1_000_000_000n); });
@@ -121,6 +121,7 @@ describe('maker-checker / four-eyes', () => {
     const q = await w.supplier.post(`/invoices/${inv}/quote`);
     const acc = await w.supplier.post('/advances', { disclosureIds: [q.disclosureId], acceptTerms: true }, undefined, { 'Idempotency-Key': 'acc-4eyes-2' });
     const id = acc.advances[0].advanceId;
+    await recordRegistrySearch(w, inv);
     await w.credit.post(`/advances/${id}/decision`, { decision: 'approve', reason: 'ok' });
     expect((await w.credit.post(`/advances/${id}/release`, undefined, 403, { 'Idempotency-Key': 'rel-4eyes-2' })).title).toBe('FOUR_EYES');
     await h.admin.query(`DELETE FROM mapema.user_role_assignment WHERE user_id = $1 AND role = 'ops'`, [h.staff.credit.id]);
@@ -167,6 +168,7 @@ describe('money controls', () => {
     const q = await w.supplier.post(`/invoices/${inv}/quote`);
     const acc = await w.supplier.post('/advances', { disclosureIds: [q.disclosureId], acceptTerms: true }, undefined, { 'Idempotency-Key': 'acc-lim-1' });
     const id = acc.advances[0].advanceId;
+    await recordRegistrySearch(w, inv);
     await w.credit.post(`/advances/${id}/decision`, { decision: 'approve', reason: 'ok' });
     const fl = await w.admin.post('/admin/float', { amountCents: '100000000', basisNote: 'facility withdrawn' }); // KES 1m float -> buyer cap 250k
     await w.approve(fl.id);
@@ -188,6 +190,7 @@ describe('money controls', () => {
       const inv = await eligibleInvoice(h, w, { number: n, amountCents: amt, dueDate: addDays(D0, 40) });
       const q = await w.supplier.post(`/invoices/${inv}/quote`);
       ids.push((await w.supplier.post('/advances', { disclosureIds: [q.disclosureId], acceptTerms: true }, undefined, { 'Idempotency-Key': `acc-${n}` })).advances[0].advanceId);
+      await recordRegistrySearch(w, inv);
     }
     const tok = await h.staff.credit.token();
     const res = await Promise.all(ids.map((id) => h.http.post(`/v1/advances/${id}/decision`).set('Authorization', `Bearer ${tok}`).send({ decision: 'approve', reason: 'race' })));

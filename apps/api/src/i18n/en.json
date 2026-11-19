@@ -32,5 +32,7 @@
   "mpesa.name_mismatch": "M-Pesa payout for invoice {invoice} went to a line registered to a different name. An AML review flag was raised.",
   "erp.paused": "ERP connection {name} was paused after repeated login failures. Ask the buyer to rotate the API key, then resume it.",
   "erp.record_changed": "Invoice {invoice} was changed in {name} after Mapema imported it. The imported copy was not changed: review it with the buyer.",
-  "payout_batch.pending": "Payout batch of {count} item(s) totalling {amount} is waiting for a second operations approval."
+  "payout_batch.pending": "Payout batch of {count} item(s) totalling {amount} is waiting for a second operations approval.",
+  "invoice.submitted": "Invoice {invoice} for {amount} dated {date} has been submitted by {submitter} (eTIMS CU: {cu}). Please review it.",
+  "registry.filing_due": "Advance {advance} on invoice {invoice} has been funded. File the assignment at the MPSRA registry and upload the registration evidence."
 }

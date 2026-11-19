@@ -22,7 +22,7 @@ import { addDays, kes } from '@mapema/pricing';
 import { FakeOdoo, MockMpesa } from '@mapema/adapters';
 import { Harness, startHarness } from './harness';
 import { batchStepUpValid, BulkService } from '../src/modules/bulk';
-import { AT, buildWorld, eligibleInvoice, LEDGER_ENV, REAL_LEDGER, seedFunding, World, WORKED } from './world';
+import { AT, buildWorld, eligibleInvoice, LEDGER_ENV, REAL_LEDGER, recordRegistrySearch, seedFunding, World, WORKED } from './world';
 
 let h: Harness; let w: World; let odoo: FakeOdoo; let odooUrl: string;
 const Q = WORKED.quoteDate;
@@ -39,6 +39,7 @@ const odooBill = (id: number, o: Record<string, unknown> = {}) => ({
 async function request(invoiceId: string) {
   const q = await w.supplier.post(`/invoices/${invoiceId}/quote`);
   const acc = await w.supplier.post('/advances', { disclosureIds: [q.disclosureId], acceptTerms: true }, undefined, { 'Idempotency-Key': `acc-${invoiceId}` });
+  await recordRegistrySearch(w, invoiceId);
   return acc.advances[0].advanceId as string;
 }
 const approve = (advanceId: string, extra: Record<string, unknown> = {}, status?: number) => w.credit.post(`/advances/${advanceId}/decision`, { decision: 'approve', reason: 'All checks green', ...extra }, status);
@@ -103,7 +104,7 @@ describe(`Phase 3 [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
     const inv = (await h.admin.query(`SELECT * FROM mapema.invoice WHERE id = $1`, [byId['1'].invoiceId])).rows[0];
     expect(inv).toMatchObject({ invoice_number: 'ODOO-1', source: 'erp', status: 'awaiting_confirmation', etims_status: 'valid', amount_cents: String(kes(500_000)) });
     // the buyer's human checker confirms (four eyes against the integration user) and signs the ILU
-    await w.buyerChecker.post(`/invoices/${inv.id}/decision`, { decision: 'approve' });
+    await w.buyerChecker.post(`/invoices/${inv.id}/decision`, { decision: 'approve', goodsReceived: true });
     const conf = await w.buyerChecker.post('/confirmations', { invoiceIds: [inv.id] });
     await h.http.post(`/v1/dev/esign/${conf.envelopeId}/complete`).expect(201);
     ids.odooInvoice = inv.id;
@@ -375,7 +376,7 @@ describe(`Phase 3 [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
     const up = await w.buyerAdmin.post('/invoices/csv', { csv });
     const invIds = up.results.map((r: any) => r.invoiceId);
     expect(invIds).toHaveLength(4);
-    const r = await w.buyerChecker.post('/invoices/bulk-decision', { invoiceIds: [...invIds, ids.odooInvoice], decision: 'approve' });
+    const r = await w.buyerChecker.post('/invoices/bulk-decision', { invoiceIds: [...invIds, ids.odooInvoice], decision: 'approve', goodsReceived: true });
     expect(r.results.map((x: any) => x.status)).toEqual(['ok', 'ok', 'ok', 'ok', 'error']);
     expect(r.results[4].error).toBe('BAD_STATE');
     await w.buyerAdmin.post('/invoices/bulk-decision', { invoiceIds: invIds, decision: 'approve' }, 403); // makers cannot check
@@ -392,6 +393,7 @@ describe(`Phase 3 [ledger=${REAL_LEDGER ? 'real Fineract' : 'mock'}]`, () => {
     expect(q.results[0].quote.advanceCents).toBe(String(kes(240_000)));
     const acc = await w.supplier.post('/advances', { disclosureIds: q.results.slice(0, 4).map((x: any) => x.quote.disclosureId), acceptTerms: true }, undefined, { 'Idempotency-Key': 'bulk-accept-1' });
     expect(acc.advances).toHaveLength(4);
+    for (const id of invIds) await recordRegistrySearch(w, id);
     for (const x of acc.advances) await approve(x.advanceId);
     ids.batchAdv = JSON.stringify(acc.advances.map((x: any) => x.advanceId));
   });
