@@ -1,16 +1,16 @@
 import { ReactNode } from 'react';
-import { formatKes, quote, STANDARD_PRICING } from '@mapema/pricing';
+import { BANK_FUNDED_A_PRICING, formatKes, quote } from '@mapema/pricing';
+import { T } from '@/components/lang';
 import { serverT } from '@/lib/lang-server';
 
 /** Worked example used by the hero and mocks, computed with the real pricing engine at build time. */
 export const EXAMPLE = (() => {
-  const q = quote(100000000n, 48, STANDARD_PRICING);
+  const q = quote(100000000n, 48, BANK_FUNDED_A_PRICING);
   return { invoice: formatKes(q.invoiceCents), advance: formatKes(q.advanceCents), balance: formatKes(q.supplierBalanceCents), total: formatKes(q.totalCostCents), days: 48 };
 })();
 
 /** Signature visual: an approved invoice that splits into "80% today" and "the rest later", under a sunrise arc of days. */
-export async function HeroVisual() {
-  const { t } = await serverT();
+export function HeroVisual() {
   const e = EXAMPLE;
   return (
     <figure className="relative mx-auto w-full max-w-[30rem]">
@@ -28,21 +28,21 @@ export async function HeroVisual() {
         <circle cx="440" cy="230" r="8" fill="#14532d" />
         <path d="M0 230h480" stroke="#e5d9c5" strokeWidth="2" />
       </svg>
-      <div className="absolute bottom-[10%] left-[9%] rounded-full bg-white px-2.5 py-0.5 text-sm font-bold text-sun-ink shadow-sm">{t('hero.day0')}</div>
-      <div className="absolute bottom-[10%] right-[4%] rounded-full bg-white px-2.5 py-0.5 text-sm font-bold text-green shadow-sm">{t('hero.dayN', { days: e.days })}</div>
+      <div className="absolute bottom-[10%] left-[9%] rounded-full bg-white px-2.5 py-0.5 text-sm font-bold text-sun-ink shadow-sm">{<T k="hero.day0" />}</div>
+      <div className="absolute bottom-[10%] right-[4%] rounded-full bg-white px-2.5 py-0.5 text-sm font-bold text-green shadow-sm">{<T k="hero.dayN" p={{ days: e.days }} />}</div>
       </div>
 
       <div className="rise relative mt-3 rounded-3xl border border-line bg-white p-5 shadow-[0_30px_60px_-35px_rgba(20,83,45,.5)]">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-muted">{t('hero.invoice')} · INV-0142</p>
+            <p className="text-sm font-semibold text-muted">{<T k="hero.invoice" />} · INV-0142</p>
             <p className="num font-display text-3xl font-bold text-ink">{e.invoice}</p>
           </div>
-          <span className="rounded-full bg-sand px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-muted">{t('hero.example')}</span>
+          <span className="rounded-full bg-sand px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-muted">{<T k="hero.example" />}</span>
         </div>
         <p className="mt-2 flex items-center gap-2 text-sm font-semibold text-green">
           <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="#dcefe3" /><path d="M6 10.5l2.5 2.5L14 7.5" fill="none" stroke="#14532d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-          {t('hero.approved')} · {t('hero.due', { days: e.days })}
+          {<T k="hero.approved" />} · {<T k="hero.due" p={{ days: e.days }} />}
         </p>
         <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-sand" aria-hidden="true">
           <span className="split-a block h-full w-[80%] rounded-l-full bg-green" />
@@ -50,15 +50,15 @@ export async function HeroVisual() {
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div className="split-a rounded-2xl bg-green p-3.5 text-white">
-            <p className="text-sm font-semibold text-mint">{t('hero.today')}</p>
+            <p className="text-sm font-semibold text-mint">{<T k="hero.today" />}</p>
             <p className="num font-display text-xl font-bold sm:text-2xl">{e.advance}</p>
           </div>
           <div className="split-b rounded-2xl bg-sun-soft p-3.5 text-ink">
-            <p className="text-sm font-semibold text-sun-ink">{t('hero.later')}</p>
+            <p className="text-sm font-semibold text-sun-ink">{<T k="hero.later" />}</p>
             <p className="num font-display text-xl font-bold sm:text-2xl">{e.balance}</p>
           </div>
         </div>
-        <p className="num mt-3 text-sm text-muted">{t('hero.fees', { total: e.total })}</p>
+        <p className="num mt-3 text-sm text-muted">{<T k="hero.fees" p={{ total: e.total }} />}</p>
       </div>
     </figure>
   );
@@ -105,7 +105,7 @@ export async function ProductMock() {
       <div aria-hidden="true" className="rounded-[1.75rem] border border-line bg-white p-4 shadow-[0_40px_80px_-50px_rgba(31,35,40,.5)] sm:p-6">
         <div className="flex items-center justify-between border-b border-line pb-3">
           <p className="font-bold text-ink">{t('mock.invoices')}</p>
-          <span className="rounded-full bg-sand px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-muted">{t('hero.example')}</span>
+          <span className="rounded-full bg-sand px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-muted">{<T k="hero.example" />}</span>
         </div>
         <ul className="divide-y divide-line">
           {rows.map((r) => (
@@ -159,15 +159,14 @@ export async function Safeguards() {
   );
 }
 
-export async function Faq({ ids = [1, 2, 3, 4, 5, 6, 7] }: { ids?: number[] }) {
-  const { t } = await serverT();
-  const p = { rate: (STANDARD_PRICING.discountRateBpsPer30d / 100).toFixed(1), fee: formatKes(STANDARD_PRICING.verificationFeeCents) };
+export function Faq({ ids = [1, 2, 3, 4, 5, 6, 7] }: { ids?: number[] }) {
+  const p = { rate: (BANK_FUNDED_A_PRICING.discountRateBpsPer30d / 100).toFixed(1) };
   return (
     <div className="faq border-t border-line" data-testid="faq">
       {ids.map((i) => (
         <details key={i}>
-          <summary>{t(`faq.q${i}`)}</summary>
-          <div>{t(`faq.a${i}`, p)}</div>
+          <summary><T k={`faq.q${i}`} /></summary>
+          <div><T k={`faq.a${i}`} p={p} /></div>
         </details>
       ))}
     </div>

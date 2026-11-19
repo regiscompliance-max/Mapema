@@ -1,28 +1,30 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { PricingError, quote, STANDARD_PRICING } from '@mapema/pricing';
+import { BANK_FUNDED_A_PRICING, PricingError, quote } from '@mapema/pricing';
 import { useT } from './lang';
 import { bps, kesFromCents, parseKesInput } from '@/lib/money';
 
 const QUICK = [['250,000', '250K'], ['500,000', '500K'], ['1,000,000', '1M'], ['5,000,000', '5M']] as const;
-const clampDays = (n: number) => Math.min(STANDARD_PRICING.maxDays, Math.max(STANDARD_PRICING.minDays, n));
+const clampDays = (n: number) => Math.min(BANK_FUNDED_A_PRICING.maxDays, Math.max(BANK_FUNDED_A_PRICING.minDays, n));
 
 export function FeeCalculator({ id = 'calculator' }: { id?: string }) {
   const t = useT();
   const [amount, setAmount] = useState('1,000,000');
   const [days, setDays] = useState('48');
-  // Pricing logic unchanged: same parse, same quote(), same error mapping.
+  const [buyerPays, setBuyerPays] = useState(false);
   const result = useMemo(() => {
     const cents = parseKesInput(amount);
     const d = Number(days);
     if (cents === null || !Number.isInteger(d)) return { error: t('calc.error.min') };
-    try { return { q: quote(cents, d, STANDARD_PRICING) }; } catch (e) {
+    const params = { ...BANK_FUNDED_A_PRICING, processingFeePayer: buyerPays ? 'buyer' as const : 'supplier' as const };
+    try { return { q: quote(cents, d, params) }; } catch (e) {
       const code = (e as PricingError).code;
       return { error: code === 'TENOR_OUT_OF_RANGE' ? t('calc.error.days') : t('calc.error.min') };
     }
-  }, [amount, days, t]);
+  }, [amount, days, buyerPays, t]);
+  const feeLabel = result.q?.processingFeePayer === 'buyer' ? t('calc.processingFeeBuyer') : t('calc.processingFee');
   const rows: [string, bigint | string][] = result.q ? [
-    [t('calc.advance'), result.q.advanceCents], [t('calc.discountFee'), result.q.discountFeeCents], [t('calc.verificationFee'), result.q.verificationFeeCents],
+    [t('calc.advance'), result.q.advanceCents], [t('calc.discountFee'), result.q.discountFeeCents], [feeLabel, result.q.processingFeeCents],
     [t('calc.totalCost'), result.q.totalCostCents], [t('calc.balance'), result.q.supplierBalanceCents],
   ] : [];
   const dNum = Number.isInteger(Number(days)) ? clampDays(Number(days)) : 48;
@@ -58,11 +60,16 @@ export function FeeCalculator({ id = 'calculator' }: { id?: string }) {
             </div>
             <button type="button" onClick={() => step(1)} aria-label={t('calc.more')} className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border-2 border-line bg-cream text-2xl font-bold text-green hover:border-green">+</button>
           </div>
-          <input type="range" className="range mt-5" min={STANDARD_PRICING.minDays} max={STANDARD_PRICING.maxDays} value={dNum}
+          <input type="range" className="range mt-5" min={BANK_FUNDED_A_PRICING.minDays} max={BANK_FUNDED_A_PRICING.maxDays} value={dNum}
             onChange={(e) => setDays(e.target.value)} aria-label={t('calc.days')} />
           <div className="mt-1 flex justify-between text-sm text-muted num" aria-hidden="true"><span>1</span><span>30</span><span>60</span><span>90</span><span>120</span></div>
         </div>
       </div>
+
+      <label className="mt-6 flex items-start gap-3 text-ink">
+        <input type="checkbox" className="mt-1 h-5 w-5 shrink-0 accent-green" checked={buyerPays} onChange={(e) => setBuyerPays(e.target.checked)} />
+        <span>{t('calc.buyerPays')}</span>
+      </label>
 
       <div className="mt-7" aria-live="polite">
         {result.error ? <p role="alert" className="rounded-2xl bg-sun-soft p-4 font-semibold text-ink">{result.error}</p> : (
@@ -89,7 +96,8 @@ export function FeeCalculator({ id = 'calculator' }: { id?: string }) {
             </dl>
           </>
         )}
-        <p className="mt-3 text-sm text-muted">{t('calc.note')}</p>
+        <p className="mt-3 text-sm text-muted">{t('fees.bankLender')}</p>
+        <p className="mt-2 text-sm text-muted">{t('calc.note')}</p>
       </div>
     </section>
   );

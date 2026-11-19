@@ -27,7 +27,9 @@ describe('no tokens in browser storage', () => {
   it('no source file writes a token to localStorage/sessionStorage or sends a bearer header', () => {
     for (const f of SRC) {
       const src = readFileSync(f, 'utf8');
-      expect(src, f).not.toMatch(/localStorage/);
+      // lang.tsx may remember the public-site language preference only (mapema.lang), never a token.
+      if (f.endsWith('/lang.tsx')) expect(src, f).toMatch(/mapema\.lang/);
+      else expect(src, f).not.toMatch(/localStorage/);
       // the only sessionStorage use allowed is the one-time PKCE verifier/state during an OIDC redirect
       for (const m of src.matchAll(/sessionStorage\.setItem\(\s*'([^']+)'/g)) expect(m[1], f).toBe('mapema.pkce');
       expect(src, f).not.toMatch(/Authorization:\s*`Bearer/);
