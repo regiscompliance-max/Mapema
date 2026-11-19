@@ -26,7 +26,7 @@ export interface World {
   approve: (approvalId: string, who?: ReturnType<typeof client>) => Promise<any>;
 }
 
-export async function buildWorld(h: Harness, o: { floatCents?: bigint; supplierLimitCents?: bigint; supplierAccount?: string; tag?: string } = {}): Promise<World> {
+export async function buildWorld(h: Harness, o: { floatCents?: bigint; supplierLimitCents?: bigint; supplierAccount?: string; tag?: string; pricingProfileCode?: 'direct-legacy' | 'bank-funded-A'; processingFeePayer?: 'supplier' | 'buyer'; lenderDisplayName?: string } = {}): Promise<World> {
   const tag = o.tag ?? 'a';
   h.clock.set(AT(WORKED.quoteDate));
   const s = (n: string) => client(h, h.staff[n].token);
@@ -54,7 +54,7 @@ export async function buildWorld(h: Harness, o: { floatCents?: bigint; supplierL
   await w.buyerAdmin.post('/consents', { orgId: buyer.id, purpose: 'crb_enquiry_and_reporting', textVersion: 'CRB-2026-11' });
   await w.buyerAdmin.post(`/organisations/${buyer.id}/submit`);
   await w.credit!.post(`/organisations/${buyer.id}/crb-pull`);
-  const prog = await w.credit!.post(`/organisations/${buyer.id}/programme`, { limitCents: '500000000', advanceRateBps: 8000, startDate: WORKED.issueDate, reviewDate: addDays(WORKED.quoteDate, 600), decisionReason: 'Strong CRB, 10y trading', governmentPayerDependent: false });
+  const prog = await w.credit!.post(`/organisations/${buyer.id}/programme`, { limitCents: '500000000', advanceRateBps: 8000, startDate: WORKED.issueDate, reviewDate: addDays(WORKED.quoteDate, 600), decisionReason: 'Strong CRB, 10y trading', governmentPayerDependent: false, pricingProfileCode: o.pricingProfileCode ?? 'direct-legacy', processingFeePayer: o.processingFeePayer, lenderDisplayName: o.lenderDisplayName });
   await w.approve(prog.approval.id);
   const pe = await w.buyerAdmin.post(`/organisations/${buyer.id}/agreements`);
   await h.http.post(`/v1/dev/esign/${pe.envelopeId}/complete`).expect(201);

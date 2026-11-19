@@ -1,28 +1,51 @@
 /**
  * [Backend Engineer + Compliance & Risk Analyst] Mapema pricing engine.
  *
- * Brief pricing rules: advance 80% of invoice (configurable per buyer, never above the
- * pricing version), discount fee 3.5% per 30 days on the amount advanced pro-rated by days,
- * verification fee KES 2,500 per invoice, KES only.
+ * Profiles (D-82):
+ *  - direct-legacy (STANDARD_PRICING): advance 80% of invoice (configurable per buyer, never
+ *    above the pricing version), discount fee 3.5% per 30 days on the amount advanced (equal to
+ *    2.8% of the invoice at 80%) pro-rated by days, verification fee KES 2,500 per invoice, KES
+ *    only. The Phase 0 worked example is preserved under this profile.
+ *  - bank-funded-A (default for new programmes under model A): 80% advance, discount fee 1.5% of
+ *    the advance per 30 days pro-rated by day, processing fee 0.5% of the invoice (minimum
+ *    KES 1,500, maximum KES 5,000) taken at funding, both fees billed by the funding bank.
  *
- * CEO-approved decisions applied here (phase-0/README.md decisions log):
+ * CEO-approved decisions applied here (phase-0/README.md decisions log and D-82):
  *  D-03  discount fee is INTEREST charged on actual days outstanding; the quote is the maximum.
  *  D-07  minimum invoice KES 50,000 (configurable); quotes with a negative supplier balance rejected.
  *  D-11  integer cents; half-up to the cent once per derived amount; supplier balance is the residual.
  *  D-17  tenor 1-120 days.
+ *  D-82  Deng approved the bank-billed fee structure (model A) on 19 Nov 2026.
  */
 import { Cents, divHalfUp, MoneyError } from './money';
 
+export type PricingProfileCode = 'direct-legacy' | 'bank-funded-A';
+export type FeeBilledBy = 'mapema' | 'funding_bank';
+export type ProcessingFeePayer = 'supplier' | 'buyer';
+
 export interface PricingParams {
   advanceRateBps: number; // 8000 = 80.00%
-  discountRateBpsPer30d: number; // 350 = 3.50% per 30 days
-  verificationFeeCents: Cents; // 250000 = KES 2,500.00
+  discountRateBpsPer30d: number; // 350 = 3.50% per 30 days on the advance
+  verificationFeeCents: Cents; // 250000 = KES 2,500.00 (direct-legacy flat fee)
   minDays: number; // 1
   maxDays: number; // 120
   minInvoiceCents: Cents; // 5000000 = KES 50,000.00
+  profileCode?: PricingProfileCode;
+  billedBy?: FeeBilledBy;
+  processingFeePayer?: ProcessingFeePayer;
+  /** 50 = 0.50% of the invoice (bank-funded-A). */
+  processingFeeBps?: number;
+  processingFeeMinCents?: Cents;
+  processingFeeMaxCents?: Cents;
+  /** Optional 20% excise on the processing fee; defaults off, pending counsel. */
+  exciseOnProcessingFee?: boolean;
+  exciseRateBps?: number;
 }
 
 export const STANDARD_PRICING: PricingParams = Object.freeze({
+  profileCode: 'direct-legacy',
+  billedBy: 'mapema',
+  processingFeePayer: 'supplier',
   advanceRateBps: 8000,
   discountRateBpsPer30d: 350,
   verificationFeeCents: 250000n,
@@ -31,6 +54,30 @@ export const STANDARD_PRICING: PricingParams = Object.freeze({
   minInvoiceCents: 5000000n,
 });
 
+/** Alias of STANDARD_PRICING: the Phase 0 / direct-lending schedule. */
+export const DIRECT_LEGACY_PRICING: PricingParams = STANDARD_PRICING;
+
+export const BANK_FUNDED_A_PRICING: PricingParams = Object.freeze({
+  profileCode: 'bank-funded-A',
+  billedBy: 'funding_bank',
+  processingFeePayer: 'supplier',
+  advanceRateBps: 8000,
+  discountRateBpsPer30d: 150, // 1.5% of the advance per 30 days
+  verificationFeeCents: 0n,
+  processingFeeBps: 50, // 0.50% of the invoice
+  processingFeeMinCents: 150000n, // KES 1,500
+  processingFeeMaxCents: 500000n, // KES 5,000
+  exciseOnProcessingFee: false,
+  exciseRateBps: 2000, // 20%, applied only when exciseOnProcessingFee is true
+  minDays: 1,
+  maxDays: 120,
+  minInvoiceCents: 5000000n,
+});
+
+export function isBankFundedProfile(p: Pick<PricingParams, 'profileCode'>): boolean {
+  return p.profileCode === 'bank-funded-A';
+}
+
 export interface Quote {
   invoiceCents: Cents;
   days: number;
@@ -38,17 +85,40 @@ export interface Quote {
   discountRateBpsPer30d: number;
   advanceCents: Cents;
   discountFeeCents: Cents; // maximum interest
-  verificationFeeCents: Cents;
-  totalCostCents: Cents;
+  verificationFeeCents: Cents; // supplier-paid fee bucket (0 when the buyer pays the processing fee)
+  processingFeeCents: Cents; // computed processing / verification fee before who-pays
+  exciseCents: Cents;
+  totalCostCents: Cents; // supplier-facing: discount + supplier-paid fees + supplier-paid excise
   mapemaKeepsCents: Cents;
   supplierBalanceCents: Cents;
   aprBps: number; // simple annualised cost (display only)
+  profileCode: PricingProfileCode;
+  billedBy: FeeBilledBy;
+  processingFeePayer: ProcessingFeePayer;
 }
 
 export class PricingError extends MoneyError {}
 
 function checkBps(v: number, field: string) {
   if (!Number.isInteger(v) || v < 0 || v > 10000) throw new PricingError('BAD_RATE', `${field} must be integer bps 0..10000`);
+}
+
+export function profileCodeOf(p: PricingParams): PricingProfileCode {
+  return p.profileCode === 'bank-funded-A' ? 'bank-funded-A' : 'direct-legacy';
+}
+
+/** Processing fee: 0.5% of the invoice, clamped to the profile min/max. */
+export function processingFeeFor(invoiceCents: Cents, p: PricingParams): Cents {
+  if (profileCodeOf(p) !== 'bank-funded-A') return p.verificationFeeCents;
+  const bps = p.processingFeeBps ?? 0;
+  checkBps(bps, 'processingFeeBps');
+  const raw = divHalfUp(invoiceCents * BigInt(bps), 10000n);
+  const min = p.processingFeeMinCents ?? 0n;
+  const max = p.processingFeeMaxCents ?? raw;
+  if (min < 0n || max < 0n || min > max) throw new PricingError('BAD_AMOUNT', 'processing fee min/max invalid');
+  if (raw < min) return min;
+  if (raw > max) return max;
+  return raw;
 }
 
 /** Interest for `days` on `principal` at `rateBpsPer30d`, half-up to the cent. */
@@ -68,17 +138,27 @@ export function quote(invoiceCents: Cents, days: number, p: PricingParams = STAN
   if (!Number.isInteger(days) || days < p.minDays || days > p.maxDays) {
     throw new PricingError('TENOR_OUT_OF_RANGE', `days to due date must be ${p.minDays}..${p.maxDays}`);
   }
+  const profileCode = profileCodeOf(p);
+  const billedBy: FeeBilledBy = p.billedBy ?? (profileCode === 'bank-funded-A' ? 'funding_bank' : 'mapema');
+  const processingFeePayer: ProcessingFeePayer = p.processingFeePayer ?? 'supplier';
   const advanceCents = divHalfUp(invoiceCents * BigInt(p.advanceRateBps), 10000n);
   if (advanceCents <= 0n) throw new PricingError('BAD_AMOUNT', 'advance would be zero');
   const discountFeeCents = interestForDays(advanceCents, p.discountRateBpsPer30d, days);
-  const verificationFeeCents = p.verificationFeeCents;
+  const processingFeeCents = processingFeeFor(invoiceCents, p);
+  const exciseOn = Boolean(p.exciseOnProcessingFee);
+  const exciseRateBps = p.exciseRateBps ?? 2000;
+  if (exciseOn) checkBps(exciseRateBps, 'exciseRateBps');
+  const exciseCents = exciseOn ? divHalfUp(processingFeeCents * BigInt(exciseRateBps), 10000n) : 0n;
+  const verificationFeeCents = processingFeePayer === 'buyer' ? 0n : processingFeeCents + exciseCents;
   const totalCostCents = discountFeeCents + verificationFeeCents;
   const mapemaKeepsCents = advanceCents + totalCostCents;
   const supplierBalanceCents = invoiceCents - mapemaKeepsCents;
   if (supplierBalanceCents < 0n) throw new PricingError('NEGATIVE_SUPPLIER_BALANCE', 'fees exceed the invoice remainder');
   // In duplum at origination: the total cost of credit may never exceed the principal, so with no
   // late charges (D-09) recoveries can never pass the NPL cap (C-07; counsel to confirm the cap wording).
-  if (totalCostCents > advanceCents) throw new PricingError('IN_DUPLUM', 'interest and fees would exceed the amount advanced');
+  // The processing fee is part of the cost of credit even when the buyer pays it (CBK/PG/22; A12).
+  const costOfCreditCents = discountFeeCents + processingFeeCents + exciseCents;
+  if (costOfCreditCents > advanceCents) throw new PricingError('IN_DUPLUM', 'interest and fees would exceed the amount advanced');
   const aprBps = Number(divHalfUp(totalCostCents * 365n * 10000n, advanceCents * BigInt(days)));
   return {
     invoiceCents,
@@ -88,10 +168,15 @@ export function quote(invoiceCents: Cents, days: number, p: PricingParams = STAN
     advanceCents,
     discountFeeCents,
     verificationFeeCents,
+    processingFeeCents,
+    exciseCents,
     totalCostCents,
     mapemaKeepsCents,
     supplierBalanceCents,
     aprBps,
+    profileCode,
+    billedBy,
+    processingFeePayer,
   };
 }
 
@@ -191,4 +276,143 @@ export function inDuplumHeadroom(principalAtNplCents: Cents, chargesAndInterestS
  */
 export function nplDaysFor(termDays: number): number {
   return termDays <= 30 ? 30 : 90;
+}
+
+/** 8.745% a year = 87,450 parts per million (91-day T-bill, CBK auction 16 Nov 2026). */
+export const DEFAULT_COST_OF_FUNDS_ANNUAL_PPM = 87450;
+export const DEFAULT_BANK_MARGIN_SHARE_BPS = 5000;
+export const DEFAULT_VAT_RATE_BPS = 1600; // 16%, pending counsel
+export const DEFAULT_COF_DAY_BASIS = 365;
+
+export interface RevenueSplitParams {
+  costOfFundsAnnualPpm: number; // 87450 = 8.745%
+  bankMarginShareBps: number; // 5000 = 50%
+  vatRateBps: number; // 1600 = 16%
+  vatPendingCounsel: boolean;
+  dayBasis: number; // 365
+}
+
+export const DEFAULT_REVENUE_SPLIT: RevenueSplitParams = Object.freeze({
+  costOfFundsAnnualPpm: DEFAULT_COST_OF_FUNDS_ANNUAL_PPM,
+  bankMarginShareBps: DEFAULT_BANK_MARGIN_SHARE_BPS,
+  vatRateBps: DEFAULT_VAT_RATE_BPS,
+  vatPendingCounsel: true,
+  dayBasis: DEFAULT_COF_DAY_BASIS,
+});
+
+export interface RevenueSplit {
+  costOfFundsCents: Cents;
+  marginCents: Cents;
+  bankMarginShareCents: Cents;
+  mapemaMarginShareCents: Cents;
+  bankShareCents: Cents; // cost of funds + the bank's share of the margin
+  mapemaPlatformFeeCents: Cents; // processing fee + Mapema's share of the margin
+  mapemaVatCents: Cents; // 16% of Mapema's fee to the bank; not added to the supplier cost
+  vatPendingCounsel: boolean;
+  exciseCents: Cents; // collected to remit; not part of either party's share
+}
+
+/**
+ * Cost of funds on the advance for `days` at an annual ppm rate, half-up to the cent (D-11),
+ * using a 365-day year (the bank-partnership plan's assumption).
+ */
+export function costOfFundsCents(principalCents: Cents, days: number, annualPpm: number, dayBasis = DEFAULT_COF_DAY_BASIS): Cents {
+  if (!Number.isInteger(annualPpm) || annualPpm < 0 || annualPpm > 1_000_000) {
+    throw new PricingError('BAD_RATE', 'cost of funds must be integer ppm 0..1000000');
+  }
+  if (!Number.isInteger(days) || days < 0) throw new PricingError('BAD_DAYS', 'days must be a non-negative integer');
+  if (!Number.isInteger(dayBasis) || dayBasis <= 0) throw new PricingError('BAD_DAYS', 'day basis must be a positive integer');
+  return divHalfUp(principalCents * BigInt(annualPpm) * BigInt(days), 1_000_000n * BigInt(dayBasis));
+}
+
+/**
+ * Bank / Mapema split on a quoted (or settled) invoice. Under direct-legacy Mapema is the
+ * lender, so the bank share is zero and Mapema keeps the discount and the fee. Under
+ * bank-funded-A the bank bills the supplier, keeps its cost of funds plus its share of the
+ * margin, and pays Mapema the processing fee plus Mapema's share of the margin. VAT at 16%
+ * on Mapema's fee to the bank is a display line, pending counsel; it is not added to the
+ * supplier's cost. Excise on the processing fee is collected to remit and is not shared.
+ */
+export function revenueSplit(args: {
+  profileCode: PricingProfileCode;
+  principalCents: Cents;
+  days: number;
+  discountFeeCents: Cents;
+  processingFeeCents: Cents;
+  exciseCents?: Cents;
+  split?: RevenueSplitParams;
+}): RevenueSplit {
+  const s = args.split ?? DEFAULT_REVENUE_SPLIT;
+  checkBps(s.bankMarginShareBps, 'bankMarginShareBps');
+  checkBps(s.vatRateBps, 'vatRateBps');
+  const exciseCents = args.exciseCents ?? 0n;
+  if (args.profileCode !== 'bank-funded-A') {
+    const mapemaPlatformFeeCents = args.discountFeeCents + args.processingFeeCents;
+    return {
+      costOfFundsCents: 0n,
+      marginCents: args.discountFeeCents,
+      bankMarginShareCents: 0n,
+      mapemaMarginShareCents: args.discountFeeCents,
+      bankShareCents: 0n,
+      mapemaPlatformFeeCents,
+      mapemaVatCents: divHalfUp(mapemaPlatformFeeCents * BigInt(s.vatRateBps), 10000n),
+      vatPendingCounsel: s.vatPendingCounsel,
+      exciseCents,
+    };
+  }
+  const costOfFundsCents_ = costOfFundsCents(args.principalCents, args.days, s.costOfFundsAnnualPpm, s.dayBasis);
+  const rawMargin = args.discountFeeCents - costOfFundsCents_;
+  const marginCents = rawMargin > 0n ? rawMargin : 0n;
+  const bankMarginShareCents = divHalfUp(marginCents * BigInt(s.bankMarginShareBps), 10000n);
+  const mapemaMarginShareCents = marginCents - bankMarginShareCents;
+  const bankShareCents = costOfFundsCents_ + bankMarginShareCents;
+  const mapemaPlatformFeeCents = args.processingFeeCents + mapemaMarginShareCents;
+  const mapemaVatCents = divHalfUp(mapemaPlatformFeeCents * BigInt(s.vatRateBps), 10000n);
+  return {
+    costOfFundsCents: costOfFundsCents_,
+    marginCents,
+    bankMarginShareCents,
+    mapemaMarginShareCents,
+    bankShareCents,
+    mapemaPlatformFeeCents,
+    mapemaVatCents,
+    vatPendingCounsel: s.vatPendingCounsel,
+    exciseCents,
+  };
+}
+
+/** Build PricingParams for a programme: bank-funded-A uses the model A schedule; direct-legacy uses the pricing version's rates. */
+export function pricingParamsFor(args: {
+  profileCode: PricingProfileCode;
+  advanceRateBps: number;
+  minInvoiceCents: Cents;
+  minDays?: number;
+  maxDays?: number;
+  processingFeePayer?: ProcessingFeePayer;
+  discountRateBpsPer30d?: number;
+  verificationFeeCents?: Cents;
+  exciseOnProcessingFee?: boolean;
+}): PricingParams {
+  if (args.profileCode === 'bank-funded-A') {
+    return {
+      ...BANK_FUNDED_A_PRICING,
+      advanceRateBps: args.advanceRateBps,
+      minInvoiceCents: args.minInvoiceCents,
+      minDays: args.minDays ?? BANK_FUNDED_A_PRICING.minDays,
+      maxDays: args.maxDays ?? BANK_FUNDED_A_PRICING.maxDays,
+      processingFeePayer: args.processingFeePayer ?? 'supplier',
+      exciseOnProcessingFee: args.exciseOnProcessingFee ?? false,
+    };
+  }
+  return {
+    ...STANDARD_PRICING,
+    advanceRateBps: args.advanceRateBps,
+    discountRateBpsPer30d: args.discountRateBpsPer30d ?? STANDARD_PRICING.discountRateBpsPer30d,
+    verificationFeeCents: args.verificationFeeCents ?? STANDARD_PRICING.verificationFeeCents,
+    minInvoiceCents: args.minInvoiceCents,
+    minDays: args.minDays ?? STANDARD_PRICING.minDays,
+    maxDays: args.maxDays ?? STANDARD_PRICING.maxDays,
+    processingFeePayer: 'supplier',
+    exciseOnProcessingFee: false,
+  };
 }

@@ -37,7 +37,7 @@ export class MockLedger implements LedgerAdapter {
   public postMaturityInterest = false;
 
   async ensureSetup() {
-    return { productId: 1, verificationChargeId: 1 };
+    return { productId: 1, verificationChargeId: 1, processingChargeId: 2, exciseChargeId: 3 };
   }
 
   private funds = new Map<string, number>();

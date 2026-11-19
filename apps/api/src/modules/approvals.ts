@@ -19,7 +19,7 @@ export type ApprovalAction =
   | 'etims_override' | 'bank_account_verify' | 'dispute_close' | 'lending_enable'
   | 'collections_policy_change' | 'recourse_start' | 'reconciliation_baseline_set' | 'reconciliation_break_resolve' | 'report_template_activate'
   | 'erp_mapping_change' | 'funding_source_change' | 'funding_retag' | 'mpesa_cap_change' | 'holiday_gazette'
-  | 'registry_search' | 'registry_filing';
+  | 'registry_search' | 'registry_filing' | 'programme_pricing_profile_change' | 'revenue_split_change';
 
 export interface ApprovalRow {
   id: string; action: ApprovalAction; entity_type: string; entity_id: string; payload: any; maker_id: string; required_role: Role; status: string;

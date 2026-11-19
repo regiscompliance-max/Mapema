@@ -37,10 +37,13 @@ function Invoices() {
     <section className="card space-y-3" aria-labelledby="offer-h">
       <h2 id="offer-h" className="h2">{t('supplier.offer')}</h2>
       <dl className="divide-y">
-        {[['Invoice', offer.invoiceAmountCents], [t('calc.advance'), offer.advanceCents], [t('calc.discountFee'), offer.discountFeeCents], [t('calc.verificationFee'), offer.verificationFeeCents], [t('calc.totalCost'), offer.totalCostCents], [t('calc.balance'), offer.supplierBalanceCents]]
-          .map(([k, v]) => <div key={k} className="flex justify-between py-2"><dt>{k}</dt><dd className="font-semibold tabular-nums">{kesFromCents(v)}</dd></div>)}
+        {[['Invoice', offer.invoiceAmountCents], [t('calc.advance'), offer.advanceCents], [t('calc.discountFee'), offer.discountFeeCents],
+          [offer.pricingProfileCode === 'bank-funded-A' ? t('calc.processingFee') : t('calc.verificationFee'), offer.pricingProfileCode === 'bank-funded-A' ? offer.processingFeeCents : offer.verificationFeeCents],
+          [t('calc.totalCost'), offer.totalCostCents], [t('calc.balance'), offer.supplierBalanceCents]]
+          .map(([k, v]) => <div key={String(k)} className="flex justify-between py-2"><dt>{k}</dt><dd className="font-semibold tabular-nums">{kesFromCents(v)}</dd></div>)}
         <div className="flex justify-between py-2 text-sm"><dt>{t('calc.apr')}</dt><dd>{bps(offer.aprBps)}</dd></div>
       </dl>
+      {offer.billedBy === 'funding_bank' && <p className="text-sm text-slate-700">{t('offer.bankLender', { bank: offer.lenderDisplayName || 'The funding bank' })}</p>}
       <ul className="list-disc space-y-1 pl-5 text-sm">{offer.explanation.map((x: string) => <li key={x}>{x}</li>)}</ul>
       <details className="text-sm"><summary className="cursor-pointer underline">How early repayment and recourse work</summary><TermsExplained example={{ advanceCents: offer.advanceCents, discountFeeCents: offer.discountFeeCents, days: offer.days ?? 0 }} /></details>
       <p className="text-xs text-slate-500">Terms {offer.termsVersion} · Key information {offer.kidVersion} · Offer valid until {new Date(offer.expiresAt).toLocaleTimeString()}</p>

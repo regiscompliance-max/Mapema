@@ -11,7 +11,7 @@ import { Body, Controller, Get, Headers, Inject, Injectable, OnModuleInit, Param
 import { z } from 'zod';
 import type { Adapters } from '@mapema/adapters';
 import { AdapterError } from '@mapema/adapters';
-import { daysBetween, formatKes, quote as priceQuote } from '@mapema/pricing';
+import { daysBetween, formatKes, pricingParamsFor, quote as priceQuote, revenueSplit } from '@mapema/pricing';
 import { Audit, SYSTEM } from '../common/audit';
 import { ADAPTERS, AppConfig, CONFIG } from '../common/config';
 import { Clock } from '../common/clock';
@@ -78,38 +78,85 @@ export class AdvancesService implements OnModuleInit {
     if (!prog) throw unprocessable('PROGRAMME_NOT_LIVE', "The buyer's programme is not live");
     const pricing = await this.settings.activePricing();
     if (!pricing) throw unprocessable('NO_ACTIVE_PRICING', 'No active pricing');
+    const splitCfg = await this.settings.currentRevenueSplit();
     const today = this.clock.today();
     const days = daysBetween(today, inv.due_date);
-    const q = priceQuote(toCents(inv.amount_cents), days, {
-      advanceRateBps: Math.min(prog.advance_rate_bps, pricing.advance_rate_bps), discountRateBpsPer30d: pricing.discount_rate_bps_per_30d,
-      verificationFeeCents: toCents(pricing.verification_fee_cents), minDays: pricing.min_days, maxDays: pricing.max_days, minInvoiceCents: await this.settings.invoiceMinimum(),
+    const params = pricingParamsFor({
+      profileCode: prog.pricing_profile_code === 'bank-funded-A' ? 'bank-funded-A' : 'direct-legacy',
+      advanceRateBps: Math.min(prog.advance_rate_bps, pricing.advance_rate_bps),
+      discountRateBpsPer30d: pricing.discount_rate_bps_per_30d,
+      verificationFeeCents: toCents(pricing.verification_fee_cents),
+      minDays: pricing.min_days, maxDays: pricing.max_days, minInvoiceCents: await this.settings.invoiceMinimum(),
+      processingFeePayer: prog.processing_fee_payer === 'buyer' ? 'buyer' : 'supplier',
+      exciseOnProcessingFee: Boolean(splitCfg.excise_on_processing_fee),
+    });
+    const q = priceQuote(toCents(inv.amount_cents), days, params);
+    const split = revenueSplit({
+      profileCode: q.profileCode, principalCents: q.advanceCents, days: q.days,
+      discountFeeCents: q.discountFeeCents, processingFeeCents: q.processingFeeCents, exciseCents: q.exciseCents,
+      split: {
+        costOfFundsAnnualPpm: Number(splitCfg.cost_of_funds_annual_ppm),
+        bankMarginShareBps: Number(splitCfg.bank_margin_share_bps),
+        vatRateBps: Number(splitCfg.vat_rate_bps),
+        vatPendingCounsel: Boolean(splitCfg.vat_pending_counsel),
+        dayBasis: 365,
+      },
     });
     const d = await this.db.tx(async (c) => {
       const r = (await c.query(
         `INSERT INTO price_disclosure (invoice_id, pricing_version_id, invoice_amount_cents, advance_rate_bps, discount_rate_bps_per_30d, quote_date, due_date, days,
-           advance_cents, discount_fee_cents, verification_fee_cents, total_cost_cents, mapema_keeps_cents, supplier_balance_cents, apr_bps, terms_version, kid_version, expires_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+           advance_cents, discount_fee_cents, verification_fee_cents, total_cost_cents, mapema_keeps_cents, supplier_balance_cents, apr_bps, terms_version, kid_version, expires_at,
+           pricing_profile_code, processing_fee_cents, processing_fee_payer, billed_by, excise_cents, lender_display_name,
+           cost_of_funds_cents, bank_share_cents, mapema_platform_fee_cents, mapema_vat_cents)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28) RETURNING *`,
         [invoiceId, pricing.id, q.invoiceCents, q.advanceRateBps, q.discountRateBpsPer30d, today, inv.due_date, days, q.advanceCents, q.discountFeeCents,
-          q.verificationFeeCents, q.totalCostCents, q.mapemaKeepsCents, q.supplierBalanceCents, q.aprBps, TERMS_VERSION, KID_VERSION, new Date(this.clock.now().getTime() + this.cfg.QUOTE_TTL_MINUTES * 60_000)])).rows[0];
-      await this.audit.record(c, u.actor, 'price_disclosure.create', 'price_disclosure', r.id, null, { invoiceId, ...q });
+          q.verificationFeeCents, q.totalCostCents, q.mapemaKeepsCents, q.supplierBalanceCents, q.aprBps, TERMS_VERSION, KID_VERSION, new Date(this.clock.now().getTime() + this.cfg.QUOTE_TTL_MINUTES * 60_000),
+          q.profileCode, q.processingFeeCents, q.processingFeePayer, q.billedBy, q.exciseCents, prog.lender_display_name ?? null,
+          split.costOfFundsCents, split.bankShareCents, split.mapemaPlatformFeeCents, split.mapemaVatCents])).rows[0];
+      await this.audit.record(c, u.actor, 'price_disclosure.create', 'price_disclosure', r.id, null, { invoiceId, ...q, ...split });
       return r;
     });
     return this.disclosureView(d);
   }
 
   disclosureView(d: any) {
+    const profile = d.pricing_profile_code ?? 'direct-legacy';
+    const billedBy = d.billed_by ?? (profile === 'bank-funded-A' ? 'funding_bank' : 'mapema');
+    const payer = d.processing_fee_payer ?? 'supplier';
+    const lender = d.lender_display_name || (billedBy === 'funding_bank' ? 'the funding bank' : 'Mapema');
+    const processing = d.processing_fee_cents != null ? toCents(d.processing_fee_cents) : toCents(d.verification_fee_cents);
+    const excise = toCents(d.excise_cents ?? 0);
+    const feeLine = profile === 'bank-funded-A'
+      ? (payer === 'buyer'
+        ? `Processing fee ${formatKes(processing)} is billed to your buyer, not to you.`
+        : `Processing fee ${formatKes(processing)}${excise > 0n ? `, plus excise ${formatKes(excise)} (pending counsel)` : ''}, billed by ${lender}.`)
+      : `Verification fee ${formatKes(toCents(d.verification_fee_cents))}.`;
+    const lenderLine = billedBy === 'funding_bank'
+      ? `${lender} is the lender and charges these fees. Mapema is the technology provider. Mapema is not yet licensed by the Central Bank of Kenya as a non-deposit-taking credit provider.`
+      : 'If the buyer has not paid 30 days after the due date, Mapema may ask you to repay (recourse).';
+    const recourseLine = billedBy === 'funding_bank'
+      ? 'If the buyer has not paid 30 days after the due date, the funding bank may ask you to repay (recourse).'
+      : undefined;
     return {
       disclosureId: d.id, invoiceId: d.invoice_id, currency: 'KES', invoiceAmountCents: toCents(d.invoice_amount_cents), days: d.days, dueDate: d.due_date,
       advanceRateBps: d.advance_rate_bps, discountRateBpsPer30d: d.discount_rate_bps_per_30d,
       advanceCents: toCents(d.advance_cents), discountFeeCents: toCents(d.discount_fee_cents), verificationFeeCents: toCents(d.verification_fee_cents),
+      processingFeeCents: processing, exciseCents: excise, processingFeePayer: payer,
       totalCostCents: toCents(d.total_cost_cents), mapemaKeepsCents: toCents(d.mapema_keeps_cents), supplierBalanceCents: toCents(d.supplier_balance_cents),
       aprBps: d.apr_bps, expiresAt: d.expires_at, termsVersion: d.terms_version, kidVersion: d.kid_version, acceptedAt: d.accepted_at,
+      pricingProfileCode: profile, billedBy, lenderDisplayName: billedBy === 'funding_bank' ? lender : null,
+      revenueSplit: d.bank_share_cents != null ? {
+        costOfFundsCents: toCents(d.cost_of_funds_cents), bankShareCents: toCents(d.bank_share_cents),
+        mapemaPlatformFeeCents: toCents(d.mapema_platform_fee_cents), mapemaVatCents: toCents(d.mapema_vat_cents),
+        vatPendingCounsel: true,
+      } : undefined,
       explanation: [
         `You receive ${formatKes(toCents(d.advance_cents))} now (${d.advance_rate_bps / 100}% of the invoice).`,
         `Discount fee (interest) is at most ${formatKes(toCents(d.discount_fee_cents))} for ${d.days} days; if your buyer pays early you pay less.`,
-        `Verification fee ${formatKes(toCents(d.verification_fee_cents))}. Total cost ${formatKes(toCents(d.total_cost_cents))} (simple annual rate ${(d.apr_bps / 100).toFixed(2)}%).`,
+        `${feeLine} Total cost to you ${formatKes(toCents(d.total_cost_cents))} (simple annual rate ${(d.apr_bps / 100).toFixed(2)}%).`,
         `When your buyer pays, you receive at least ${formatKes(toCents(d.supplier_balance_cents))} more within 1 business day.`,
-        'If the buyer has not paid 30 days after the due date, Mapema may ask you to repay (recourse).',
+        lenderLine,
+        ...(recourseLine ? [recourseLine] : []),
       ],
     };
   }
@@ -129,9 +176,12 @@ export class AdvancesService implements OnModuleInit {
         if (inv.status !== 'eligible') throw conflict('NOT_ELIGIBLE', `Invoice is ${inv.status}`);
         await c.query(`UPDATE price_disclosure SET accepted_by = $2, accepted_at = now(), accepted_ip = $3 WHERE id = $1`, [id, u.id, ip ?? null]);
         const a = (await c.query(
-          `INSERT INTO advance (invoice_id, supplier_id, buyer_id, price_disclosure_id, principal_cents, discount_fee_cents, verification_fee_cents, status, rate_bps_per_30d, term_days, due_date)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,'requested',$8,$9,$10) RETURNING *`,
-          [inv.id, inv.supplier_id, inv.buyer_id, id, d.advance_cents, d.discount_fee_cents, d.verification_fee_cents, d.discount_rate_bps_per_30d, d.days, d.due_date])).rows[0];
+          `INSERT INTO advance (invoice_id, supplier_id, buyer_id, price_disclosure_id, principal_cents, discount_fee_cents, verification_fee_cents, status, rate_bps_per_30d, term_days, due_date,
+             pricing_profile_code, processing_fee_payer, billed_by, excise_cents, cost_of_funds_cents, bank_share_cents, mapema_platform_fee_cents, mapema_vat_cents)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,'requested',$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+          [inv.id, inv.supplier_id, inv.buyer_id, id, d.advance_cents, d.discount_fee_cents, d.verification_fee_cents, d.discount_rate_bps_per_30d, d.days, d.due_date,
+           d.pricing_profile_code ?? 'direct-legacy', d.processing_fee_payer ?? 'supplier', d.billed_by ?? 'mapema', d.excise_cents ?? 0,
+           d.cost_of_funds_cents, d.bank_share_cents, d.mapema_platform_fee_cents, d.mapema_vat_cents])).rows[0];
         await c.query(`UPDATE invoice SET status = 'advance_requested', updated_at = now() WHERE id = $1`, [inv.id]);
         await this.audit.record(c, u.actor, 'advance.request', 'advance', a.id, null, { disclosureId: id, principalCents: a.principal_cents, ip });
         return { advanceId: a.id, status: a.status, principalCents: toCents(a.principal_cents) };
@@ -338,9 +388,13 @@ export class AdvancesService implements OnModuleInit {
     }
     const termDays = daysBetween(today, a.due_date);
     const fundId = await this.funding.fundIdFor(advanceId);
+    const disc = await this.db.one(`SELECT processing_fee_cents FROM price_disclosure WHERE id = $1`, [a.price_disclosure_id]);
     const { loanId } = await this.adapters.ledger.bookAdvance(ctx, {
       externalId: advanceId, clientId, principalCents: toCents(a.principal_cents), rateBpsPer30d: a.rate_bps_per_30d, days: termDays,
       disbursementDate: today, dueDate: a.due_date, verificationFeeCents: toCents(a.verification_fee_cents), fundId,
+      feeChargeKind: a.pricing_profile_code === 'bank-funded-A' ? 'processing' : 'verification',
+      processingFeeCents: disc?.processing_fee_cents != null ? toCents(disc.processing_fee_cents) : undefined,
+      exciseCents: toCents(a.excise_cents ?? 0),
     });
     await this.db.query(`UPDATE advance SET fineract_loan_id = $2, disbursement_date = $3 WHERE id = $1`, [advanceId, loanId, today]);
     if (fundId) await this.funding.syncLedgerTag(advanceId);

@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { kes } from '@mapema/pricing';
 import {
-  annualRateFromBpsPer30d, centsToDecimal, createAdapters, decimalToCents, LocalEncryptedStorage, MockBank, MockCrb,
-  MockEsign, MockEtims, MockKyc, MockLedger, MockSms, signWebhook, verifyWebhook,
+  annualRateFromBpsPer30d, CBK_ALLOCATION_ORDER, centsToDecimal, createAdapters, decimalToCents,
+  EXCISE_CHARGE_NAME, LocalEncryptedStorage, MockBank, MockCrb, MockEsign, MockEtims, MockKyc, MockLedger, MockSms,
+  PROCESSING_CHARGE_NAME, signWebhook, verifyWebhook, VERIFICATION_CHARGE_NAME,
 } from '../src';
 
 const ctx = { requestId: 't' };
@@ -125,5 +126,34 @@ describe('storage and factory', () => {
     expect(() => createAdapters({ APP_ENV: 'production' })).toThrow(/not allowed in production/);
     expect(() => createAdapters({ APP_ENV: 'staging', ADAPTER_MODE_BANK: 'live' })).toThrow(/only allowed in production/);
     expect(createAdapters({ APP_ENV: 'test' }).ledger.mode).toBe('mock');
+  });
+});
+
+describe('D-82 Fineract charge mapping for bank-funded-A', () => {
+  it('keeps distinct charge names and the CBK principal-fees-interest order', () => {
+    expect(VERIFICATION_CHARGE_NAME).toMatch(/verification/i);
+    expect(PROCESSING_CHARGE_NAME).toMatch(/processing fee/i);
+    expect(EXCISE_CHARGE_NAME).toMatch(/excise/i);
+    expect(EXCISE_CHARGE_NAME).toMatch(/pending counsel/i);
+    const names = CBK_ALLOCATION_ORDER.join(',');
+    expect(names.indexOf('DUE_PRINCIPAL')).toBeLessThan(names.indexOf('DUE_FEE'));
+    expect(names.indexOf('DUE_FEE')).toBeLessThan(names.indexOf('DUE_INTEREST'));
+  });
+  it('3.5% per 30 days is 42% p.a. and 1.5% per 30 days is 18% p.a. on a 360-day year', () => {
+    expect(annualRateFromBpsPer30d(350)).toBe('42.00');
+    expect(annualRateFromBpsPer30d(150)).toBe('18.00');
+  });
+  it('mock ledger still allocates a 5,000 processing fee after principal', async () => {
+    const l = new MockLedger();
+    const { loanId, scheduledInterestCents } = await l.bookAdvance(ctx, {
+      externalId: 'bank-a', clientId: 1, principalCents: kes(800_000), rateBpsPer30d: 150, days: 48,
+      disbursementDate: '2027-01-04', dueDate: '2027-02-21', verificationFeeCents: kes(5_000),
+      feeChargeKind: 'processing', processingFeeCents: kes(5_000),
+    });
+    expect(scheduledInterestCents).toBe(kes(19_200));
+    const r = await l.repay(ctx, loanId, kes(1_000_000), '2027-02-21', 'p1');
+    expect(r.principalCents).toBe(kes(800_000));
+    expect(r.feesCents).toBe(kes(5_000));
+    expect(r.interestCents).toBe(kes(19_200));
   });
 });

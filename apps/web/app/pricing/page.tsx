@@ -1,4 +1,4 @@
-import { formatKes, STANDARD_PRICING } from '@mapema/pricing';
+import { BANK_FUNDED_A_PRICING, formatKes, STANDARD_PRICING } from '@mapema/pricing';
 import { FeeCalculator } from '@/components/fee-calculator';
 import { serverT } from '@/lib/lang-server';
 
@@ -9,8 +9,11 @@ export default async function Pricing() {
       <h1 className="h1">{t('fees.title')}</h1>
       <p className="text-lg">{t('fees.lead')}</p>
       <ul className="list-disc space-y-2 pl-6">
-        <li>{t('fees.discount', { rate: (STANDARD_PRICING.discountRateBpsPer30d / 100).toFixed(1) })}</li>
+        <li>{t('fees.discount', { rate: (BANK_FUNDED_A_PRICING.discountRateBpsPer30d / 100).toFixed(1) })}</li>
+        <li>{t('fees.processing')}</li>
+        <li>{t('fees.bankLender')}</li>
         <li>{t('fees.verification', { fee: formatKes(STANDARD_PRICING.verificationFeeCents) })}</li>
+        <li>{t('fees.legacyNote')}</li>
       </ul>
       <FeeCalculator />
     </div>

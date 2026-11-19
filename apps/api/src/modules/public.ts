@@ -7,7 +7,7 @@ import { Body, Controller, Get, Inject, Injectable, Post, Req } from '@nestjs/co
 import { Throttle } from '@nestjs/throttler';
 import { z } from 'zod';
 import type { Adapters } from '@mapema/adapters';
-import { quote, STANDARD_PRICING } from '@mapema/pricing';
+import { BANK_FUNDED_A_PRICING, pricingParamsFor, quote, STANDARD_PRICING } from '@mapema/pricing';
 import { Audit, SYSTEM } from '../common/audit';
 import { ADAPTERS, AppConfig, CONFIG } from '../common/config';
 import { FieldCrypto } from '../common/crypto';
@@ -32,14 +32,26 @@ export class PublicService {
     return { ok: db && providers.every((p: any) => p.ok), db, providers };
   }
 
-  async feeQuote(invoiceCents: bigint, days: number) {
+  async feeQuote(invoiceCents: bigint, days: number, profileCode?: 'direct-legacy' | 'bank-funded-A', processingFeePayer: 'supplier' | 'buyer' = 'supplier') {
     const p = await this.settings.activePricing();
-    const params = p
-      ? { advanceRateBps: p.advance_rate_bps, discountRateBpsPer30d: p.discount_rate_bps_per_30d, verificationFeeCents: toCents(p.verification_fee_cents), minDays: p.min_days, maxDays: p.max_days, minInvoiceCents: await this.settings.invoiceMinimum() }
-      : STANDARD_PRICING;
+    const minInvoiceCents = await this.settings.invoiceMinimum();
+    const params = profileCode === 'bank-funded-A'
+      ? pricingParamsFor({ profileCode, advanceRateBps: BANK_FUNDED_A_PRICING.advanceRateBps, minInvoiceCents, processingFeePayer })
+      : p
+        ? pricingParamsFor({
+            profileCode: 'direct-legacy', advanceRateBps: p.advance_rate_bps, discountRateBpsPer30d: p.discount_rate_bps_per_30d,
+            verificationFeeCents: toCents(p.verification_fee_cents), minDays: p.min_days, maxDays: p.max_days, minInvoiceCents,
+          })
+        : STANDARD_PRICING;
     const q = quote(invoiceCents, days, params);
-    return { ...q, illustrative: true, pricingVersion: p?.code ?? 'STANDARD (not yet CBK-approved)', explanation:
-      'The discount fee is interest for the days the advance is outstanding. The figure shown is the maximum; if your buyer pays early you pay less. The verification fee is fixed.' };
+    const bankNote = q.billedBy === 'funding_bank'
+      ? ' The funding bank is the lender and charges these fees. Mapema is the technology provider and is not yet licensed by the Central Bank of Kenya as a non-deposit-taking credit provider.'
+      : '';
+    const feeNote = q.profileCode === 'bank-funded-A'
+      ? ' The processing fee is 0.5% of the invoice, at least KES 1,500 and at most KES 5,000, taken at funding.'
+      : ' The verification fee is fixed.';
+    return { ...q, illustrative: true, pricingVersion: q.profileCode === 'bank-funded-A' ? 'bank-funded-A (illustrative, not yet CBK-approved)' : (p?.code ?? 'STANDARD (not yet CBK-approved)'), explanation:
+      'The discount fee is interest for the days the advance is outstanding. The figure shown is the maximum; if your buyer pays early you pay less.' + feeNote + bankNote };
   }
 
   async lead(b: { contactName: string; company: string; email: string; phone?: string; spendBand?: string; role: 'buyer' | 'supplier'; privacyNoticeVersion: string }) {
@@ -71,8 +83,12 @@ export class PublicController {
 
   @Post('fee-quote') @Throttle({ default: { limit: 30, ttl: 60_000 } })
   feeQuote(@Body() b: unknown) {
-    const body = z.object({ invoiceAmountCents: zPositiveCents, days: z.number().int().min(1).max(120), currency: z.literal('KES').default('KES') }).parse(b);
-    return this.s.feeQuote(body.invoiceAmountCents, body.days);
+    const body = z.object({
+      invoiceAmountCents: zPositiveCents, days: z.number().int().min(1).max(120), currency: z.literal('KES').default('KES'),
+      profileCode: z.enum(['direct-legacy', 'bank-funded-A']).optional(),
+      processingFeePayer: z.enum(['supplier', 'buyer']).optional(),
+    }).parse(b);
+    return this.s.feeQuote(body.invoiceAmountCents, body.days, body.profileCode, body.processingFeePayer);
   }
 
   @Post('leads') @Throttle({ default: { limit: 5, ttl: 60_000 } })

@@ -116,3 +116,11 @@ Deng approved the Phase 4 security proposal on 18 Nov 2026 (Europe/London) with 
 | D-81 | Phase 4 security (P4-1 to P4-8) is built on branch `phase-4-security` against the sign-off above. Worked example unchanged. Marketing-site Worker not deployed. |
 
 **Questions for Deng (defaults apply if no answer):** Q-S to Q-Z in `docs/phase-4-security/proposal.md`, all accepted as the defaults above.
+
+### Bank-billed fee structure, model A (19 Nov 2026)
+
+**[Product Manager + Compliance]** Recorded 19 Nov 2026. Deng approved switching Mapema's pricing to the bank-billed fee structure for model A (a white-label platform the bank funds).
+
+| ID | Decision |
+| --- | --- |
+| D-82 | Deng approved the bank-billed fee structure (model A) on 19 Nov 2026. Pricing is a profile set per programme, with maker-checker on changes. The existing **direct-legacy** profile keeps today's schedule (80% advance, 2.8% of the invoice / 3.5% of the advance per 30 days, KES 2,500 verification) so the Phase 0 worked example still holds. New programmes default to **bank-funded-A**: 80% advance, 1.5% of the advance per 30 days, a processing fee of 0.5% of the invoice (minimum KES 1,500, maximum KES 5,000) taken at funding, both fees billed by the funding bank as the credit provider, with an option for the buyer to pay the processing fee. The bank's cost of funds (default 8.745% a year) and the 50/50 margin split are configurable under maker-checker. Mapema earns the processing fee plus its share of the margin. A 20% excise line on the processing fee and a 16% VAT line on Mapema's fee to the bank are display flags that default off / pending counsel. The site and the application still say Mapema is **not yet licensed**. |

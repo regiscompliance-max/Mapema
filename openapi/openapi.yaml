@@ -345,6 +345,61 @@ paths:
           "$ref": "#/components/responses/Problem"
         "429":
           "$ref": "#/components/responses/Problem"
+  "/v1/admin/revenue-split":
+    get:
+      tags:
+        - "Admin"
+      operationId: "admin_revenueSplit"
+      summary: "GET admin/revenue-split"
+      description: "Roles: admin, ceo, credit, ops, compliance (MFA required for all users). Exact validation rules live in the zod schema in the controller."
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+      responses:
+        "200":
+          description: "Success. Money values are KES integer cents serialised as decimal strings."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/AnyJson"
+        "400":
+          "$ref": "#/components/responses/Problem"
+        "401":
+          "$ref": "#/components/responses/Problem"
+        "403":
+          "$ref": "#/components/responses/Problem"
+        "429":
+          "$ref": "#/components/responses/Problem"
+    post:
+      tags:
+        - "Admin"
+      operationId: "admin_proposeRevenueSplit"
+      summary: "POST admin/revenue-split"
+      description: "Roles: admin, credit (MFA required for all users). Exact validation rules live in the zod schema in the controller."
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+      responses:
+        "201":
+          description: "Success. Money values are KES integer cents serialised as decimal strings."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/AnyJson"
+        "400":
+          "$ref": "#/components/responses/Problem"
+        "401":
+          "$ref": "#/components/responses/Problem"
+        "403":
+          "$ref": "#/components/responses/Problem"
+        "429":
+          "$ref": "#/components/responses/Problem"
   "/v1/admin/service-accounts":
     get:
       tags:
@@ -4756,6 +4811,18 @@ paths:
                   type: "boolean"
                 governmentPayerNote:
                   type: "string"
+                pricingProfileCode:
+                  type: "string"
+                  enum:
+                    - "direct-legacy"
+                    - "bank-funded-A"
+                processingFeePayer:
+                  type: "string"
+                  enum:
+                    - "supplier"
+                    - "buyer"
+                lenderDisplayName:
+                  type: "string"
               required:
                 - "limitCents"
                 - "advanceRateBps"
@@ -4763,6 +4830,55 @@ paths:
                 - "reviewDate"
                 - "decisionReason"
                 - "governmentPayerDependent"
+      responses:
+        "201":
+          description: "Success. Money values are KES integer cents serialised as decimal strings."
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/AnyJson"
+        "400":
+          "$ref": "#/components/responses/Problem"
+        "401":
+          "$ref": "#/components/responses/Problem"
+        "403":
+          "$ref": "#/components/responses/Problem"
+        "429":
+          "$ref": "#/components/responses/Problem"
+  "/v1/organisations/{id}/programme/pricing-profile":
+    post:
+      tags:
+        - "Onboarding"
+      operationId: "onboarding_programmePricing"
+      summary: "POST organisations/{id}/programme/pricing-profile"
+      description: "Roles: credit (MFA required for all users). Exact validation rules live in the zod schema in the controller."
+      parameters:
+        - name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              type: "object"
+              properties:
+                pricingProfileCode:
+                  type: "string"
+                  enum:
+                    - "direct-legacy"
+                    - "bank-funded-A"
+                processingFeePayer:
+                  type: "string"
+                  enum:
+                    - "supplier"
+                    - "buyer"
+                lenderDisplayName:
+                  type: "string"
+              required:
+                - "pricingProfileCode"
       responses:
         "201":
           description: "Success. Money values are KES integer cents serialised as decimal strings."
@@ -5240,6 +5356,16 @@ paths:
                   type: "integer"
                 currency:
                   type: "string"
+                profileCode:
+                  type: "string"
+                  enum:
+                    - "direct-legacy"
+                    - "bank-funded-A"
+                processingFeePayer:
+                  type: "string"
+                  enum:
+                    - "supplier"
+                    - "buyer"
               required:
                 - "invoiceAmountCents"
                 - "days"
@@ -5268,18 +5394,6 @@ paths:
           "application/json":
             schema:
               type: "object"
-              properties:
-                invoiceAmountCents:
-                  type: "string"
-                  pattern: "^[0-9]+$"
-                  description: "KES integer cents as a decimal string"
-                days:
-                  type: "integer"
-                currency:
-                  type: "string"
-              required:
-                - "invoiceAmountCents"
-                - "days"
       responses:
         "200":
           description: "Success. Money values are KES integer cents serialised as decimal strings."

@@ -154,6 +154,25 @@ function Settings() {
       <Msg msg={msg} />
       <p>Float: {kesFromCents(data.floatCents)} · Minimum invoice: {kesFromCents(data.invoiceMinimumCents)} · Environment: {data.environment}</p>
       <Table rows={data.pricing} cols={[{ key: 'code', label: 'Pricing' }, { key: 'status', label: 'Status' }, { key: 'cbk_approval_ref', label: 'CBK ref' }, { key: 'discount_rate_bps_per_30d', label: 'bps/30d' }, { key: 'verification_fee_cents', label: 'Fee', money: true }]} />
+      {data.revenueSplit && (
+        <form className="card grid gap-3 sm:grid-cols-2" onSubmit={(e) => {
+          e.preventDefault();
+          const v = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
+          void run(() => api('/admin/revenue-split', { body: {
+            costOfFundsAnnualPpm: Math.round(Number(v.cof) * 10000),
+            bankMarginShareBps: Math.round(Number(v.share) * 100),
+            vatRateBps: 1600, vatPendingCounsel: true,
+            exciseOnProcessingFee: Boolean(v.excise), exciseRateBps: 2000, excisePendingCounsel: true,
+          } }), 'Proposed - the CEO must approve').then(reload);
+        }}>
+          <h3 className="h2 sm:col-span-2">Revenue split (model A)</h3>
+          <label><span className="label">Bank cost of funds (annual %)</span><input name="cof" className="input" type="number" step="0.001" min="0" max="100" defaultValue={(Number(data.revenueSplit.cost_of_funds_annual_ppm) / 10000).toFixed(3)} /></label>
+          <label><span className="label">Bank share of the margin (%)</span><input name="share" className="input" type="number" step="1" min="0" max="100" defaultValue={Number(data.revenueSplit.bank_margin_share_bps) / 100} /></label>
+          <label className="flex gap-2 text-sm sm:col-span-2"><input type="checkbox" name="excise" defaultChecked={Boolean(data.revenueSplit.excise_on_processing_fee)} /> Add 20% excise on the processing fee (pending counsel, default off)</label>
+          <p className="text-sm text-slate-600 sm:col-span-2">VAT at 16% on Mapema&apos;s fee to the bank is shown in finance reports and is pending counsel.</p>
+          <button className="btn sm:col-span-2" disabled={busy}>Propose new split</button>
+        </form>
+      )}
     </div>
   );
 }

@@ -9,7 +9,9 @@
  *  - PROGRESSIVE schedule + interest recalculation (interest on actual days, D-03)
  *  - advanced payment allocation, VERTICAL processing, order
  *      principal (past due, due, in advance) -> fees -> penalties -> interest   (CBK order)
- *  - verification fee = flat loan charge due on the due date
+ *  - verification fee (direct-legacy) or processing fee (bank-funded-A) = flat loan charge due on the due date
+ *  - optional excise charge on the processing fee (config flag, default off, pending counsel)
+ *  - payment allocation order remains principal, then fees, then interest
  */
 import { Cents } from '@mapema/pricing';
 import { AdapterContext, AdapterMode, HealthCheck } from './common';
@@ -26,7 +28,11 @@ export interface LedgerLoanRequest {
   days: number;
   disbursementDate: string; // ISO date (EAT)
   dueDate: string;
-  verificationFeeCents: Cents;
+  verificationFeeCents: Cents; // total fees booked on the loan (0 when the buyer pays the processing fee)
+  /** bank-funded-A: book these as the named Fineract charges when the supplier pays them. */
+  processingFeeCents?: Cents;
+  exciseCents?: Cents;
+  feeChargeKind?: 'verification' | 'processing';
   /** Phase 3: Fineract fund (funding source) recorded at origination; immutable once the loan is active */
   fundId?: number;
 }
@@ -55,7 +61,7 @@ export interface LedgerRepayment {
 
 export interface LedgerAdapter {
   readonly mode: AdapterMode;
-  ensureSetup(): Promise<{ productId: number; verificationChargeId: number }>;
+  ensureSetup(): Promise<{ productId: number; verificationChargeId: number; processingChargeId?: number; exciseChargeId?: number }>;
   createClient(ctx: AdapterContext, org: { externalId: string; legalName: string; activationDate: string }): Promise<number>;
   bookAdvance(ctx: AdapterContext, req: LedgerLoanRequest): Promise<{ loanId: number; scheduledInterestCents: Cents }>;
   undoDisbursal(ctx: AdapterContext, loanId: number): Promise<void>;

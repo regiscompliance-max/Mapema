@@ -9,13 +9,19 @@ import {
   allocate,
   actualInterest,
   assertKes,
+  BANK_FUNDED_A_PRICING,
+  costOfFundsCents,
   daysBetween,
+  DEFAULT_REVENUE_SPLIT,
+  DIRECT_LEGACY_PRICING,
   divHalfUp,
   formatKes,
   inDuplumHeadroom,
   kes,
   parseCents,
+  processingFeeFor,
   quote,
+  revenueSplit,
   settlementFor,
   STANDARD_PRICING,
 } from '../src';
@@ -194,5 +200,165 @@ describe('in duplum and NPL classification (C-07)', () => {
     expect(nplDaysFor(30)).toBe(30);
     expect(nplDaysFor(31)).toBe(90);
     expect(nplDaysFor(120)).toBe(90);
+  });
+});
+
+
+describe('D-82 direct-legacy alias preserves the Phase 0 worked example', () => {
+  it('DIRECT_LEGACY_PRICING is STANDARD_PRICING', () => {
+    expect(DIRECT_LEGACY_PRICING).toBe(STANDARD_PRICING);
+    const q = quote(kes(1_000_000), 48, DIRECT_LEGACY_PRICING);
+    expect(q.profileCode).toBe('direct-legacy');
+    expect(q.billedBy).toBe('mapema');
+    expect(q.advanceCents).toBe(kes(800_000));
+    expect(q.discountFeeCents).toBe(kes(44_800));
+    expect(q.verificationFeeCents).toBe(kes(2_500));
+    expect(q.processingFeeCents).toBe(kes(2_500));
+    expect(q.totalCostCents).toBe(kes(47_300));
+    expect(q.supplierBalanceCents).toBe(kes(152_700));
+    expect(q.aprBps).toBe(4496);
+  });
+});
+
+describe('D-82 bank-funded-A worked examples', () => {
+  const oneM = quote(kes(1_000_000), 48, BANK_FUNDED_A_PRICING);
+  it('KES 1,000,000 over 48 days: advance 800,000, discount 19,200, processing 5,000, total 24,200, balance 175,800', () => {
+    expect(oneM.profileCode).toBe('bank-funded-A');
+    expect(oneM.billedBy).toBe('funding_bank');
+    expect(oneM.processingFeePayer).toBe('supplier');
+    expect(oneM.advanceCents).toBe(kes(800_000));
+    expect(oneM.discountFeeCents).toBe(kes(19_200));
+    expect(oneM.processingFeeCents).toBe(kes(5_000));
+    expect(oneM.verificationFeeCents).toBe(kes(5_000));
+    expect(oneM.exciseCents).toBe(0n);
+    expect(oneM.totalCostCents).toBe(kes(24_200));
+    expect(oneM.supplierBalanceCents).toBe(kes(175_800));
+    expect(oneM.aprBps).toBe(2300); // 24,200 / 800,000 * 365/48 = 23.0026% -> 23.00%
+    expect(oneM.mapemaKeepsCents + oneM.supplierBalanceCents).toBe(kes(1_000_000));
+  });
+  it('allocation of a full KES 1,000,000 payment yields supplier balance 175,800 (existing order, not forced)', () => {
+    const s = settlementFor({
+      invoiceCents: kes(1_000_000), principalCents: kes(800_000), verificationFeeCents: oneM.verificationFeeCents,
+      disclosedInterestMaxCents: oneM.discountFeeCents, rateBpsPer30d: 150, daysOutstanding: 48, paymentCents: kes(1_000_000),
+    });
+    expect(s.allocation).toEqual({
+      principalCents: kes(800_000), feesCents: kes(5_000), interestCents: kes(19_200),
+      supplierBalanceCents: kes(175_800), unappliedCents: 0n,
+    });
+  });
+  it('KES 200,000 over 48 days: discount 3,840, processing 1,500 (floor), total 5,340', () => {
+    const q = quote(kes(200_000), 48, BANK_FUNDED_A_PRICING);
+    expect(q.advanceCents).toBe(kes(160_000));
+    expect(q.discountFeeCents).toBe(kes(3_840));
+    expect(processingFeeFor(kes(200_000), BANK_FUNDED_A_PRICING)).toBe(kes(1_500));
+    expect(q.processingFeeCents).toBe(kes(1_500));
+    expect(q.totalCostCents).toBe(kes(5_340));
+    expect(q.supplierBalanceCents).toBe(kes(34_660));
+    expect(q.aprBps).toBe(2538); // 5,340 / 160,000 * 365/48 = 25.3789% -> 25.38%
+    const s = settlementFor({
+      invoiceCents: kes(200_000), principalCents: q.advanceCents, verificationFeeCents: q.verificationFeeCents,
+      disclosedInterestMaxCents: q.discountFeeCents, rateBpsPer30d: 150, daysOutstanding: 48, paymentCents: kes(200_000),
+    });
+    expect(s.allocation.supplierBalanceCents).toBe(q.supplierBalanceCents);
+    expect(s.allocation.feesCents).toBe(kes(1_500));
+    expect(s.allocation.interestCents).toBe(kes(3_840));
+  });
+  it('buyer-pays variant: the supplier pays only the discount fee of 19,200', () => {
+    const q = quote(kes(1_000_000), 48, { ...BANK_FUNDED_A_PRICING, processingFeePayer: 'buyer' });
+    expect(q.processingFeeCents).toBe(kes(5_000));
+    expect(q.verificationFeeCents).toBe(0n);
+    expect(q.totalCostCents).toBe(kes(19_200));
+    expect(q.supplierBalanceCents).toBe(kes(180_800));
+    expect(q.aprBps).toBe(1825); // 19,200 / 800,000 * 365/48 = 18.25%
+    const s = settlementFor({
+      invoiceCents: kes(1_000_000), principalCents: kes(800_000), verificationFeeCents: 0n,
+      disclosedInterestMaxCents: kes(19_200), rateBpsPer30d: 150, daysOutstanding: 48, paymentCents: kes(1_000_000),
+    });
+    expect(s.allocation).toEqual({
+      principalCents: kes(800_000), feesCents: 0n, interestCents: kes(19_200),
+      supplierBalanceCents: kes(180_800), unappliedCents: 0n,
+    });
+  });
+  it('excise on the processing fee defaults off and is labelled pending counsel when switched on', () => {
+    expect(BANK_FUNDED_A_PRICING.exciseOnProcessingFee).toBe(false);
+    const off = quote(kes(1_000_000), 48, BANK_FUNDED_A_PRICING);
+    expect(off.exciseCents).toBe(0n);
+    const on = quote(kes(1_000_000), 48, { ...BANK_FUNDED_A_PRICING, exciseOnProcessingFee: true });
+    expect(on.exciseCents).toBe(kes(1_000)); // 20% of 5,000
+    expect(on.totalCostCents).toBe(kes(25_200));
+    expect(on.supplierBalanceCents).toBe(kes(174_800));
+  });
+  it('processing fee is capped at KES 5,000 and floored at KES 1,500', () => {
+    expect(processingFeeFor(kes(2_000_000), BANK_FUNDED_A_PRICING)).toBe(kes(5_000));
+    expect(processingFeeFor(kes(400_000), BANK_FUNDED_A_PRICING)).toBe(kes(2_000));
+    expect(processingFeeFor(kes(50_000), BANK_FUNDED_A_PRICING)).toBe(kes(1_500));
+  });
+});
+
+describe('D-82 revenue split (bank cost of funds + 50/50 margin, VAT pending counsel)', () => {
+  it('cost of funds is half-up to the cent (D-11); the pitch rounded to the shilling', () => {
+    const cof = costOfFundsCents(kes(800_000), 48, DEFAULT_REVENUE_SPLIT.costOfFundsAnnualPpm, 365);
+    // 800,000 * 8.745% * 48 / 365 = 9,200.21917... -> KES 9,200.22 (half-up to the cent)
+    // The bank partnership plan displayed KES 9,200 (shilling rounding). Report, do not force.
+    expect(cof).toBe(920022n);
+    expect(cof).not.toBe(kes(9_200));
+  });
+  it('KES 1,000,000 / 48 days: Mapema gets the processing fee plus half the margin', () => {
+    const q = quote(kes(1_000_000), 48, BANK_FUNDED_A_PRICING);
+    const r = revenueSplit({
+      profileCode: q.profileCode, principalCents: q.advanceCents, days: q.days,
+      discountFeeCents: q.discountFeeCents, processingFeeCents: q.processingFeeCents,
+    });
+    expect(r.costOfFundsCents).toBe(920022n);
+    expect(r.marginCents).toBe(q.discountFeeCents - 920022n); // 999,978 cents
+    expect(r.bankMarginShareCents + r.mapemaMarginShareCents).toBe(r.marginCents);
+    expect(r.bankShareCents).toBe(r.costOfFundsCents + r.bankMarginShareCents);
+    expect(r.mapemaPlatformFeeCents).toBe(q.processingFeeCents + r.mapemaMarginShareCents);
+    // Pitch figures (shilling-rounded COF 9,200) were bank 14,200 / Mapema 10,000.
+    // With D-11 cent rounding they differ by 11 cents and 11 cents respectively.
+    expect(r.bankShareCents).toBe(1420011n); // KES 14,200.11
+    expect(r.mapemaPlatformFeeCents).toBe(999989n); // KES 9,999.89
+    expect(r.vatPendingCounsel).toBe(true);
+    expect(r.mapemaVatCents).toBe(159998n); // 16% of 9,999.89 = 1,599.9824 -> 1,599.98
+  });
+  it('KES 200,000 / 48 days: Mapema 2,499.98 and bank 2,840.02 vs pitch 2,500 / 2,840', () => {
+    const q = quote(kes(200_000), 48, BANK_FUNDED_A_PRICING);
+    const r = revenueSplit({
+      profileCode: q.profileCode, principalCents: q.advanceCents, days: q.days,
+      discountFeeCents: q.discountFeeCents, processingFeeCents: q.processingFeeCents,
+    });
+    expect(r.costOfFundsCents).toBe(184004n); // 1,840.0438... -> 1,840.04
+    expect(r.bankShareCents).toBe(284002n);
+    expect(r.mapemaPlatformFeeCents).toBe(249998n);
+  });
+  it('buyer-pays does not change the split: Mapema still earns the processing fee (from the buyer)', () => {
+    const q = quote(kes(1_000_000), 48, { ...BANK_FUNDED_A_PRICING, processingFeePayer: 'buyer' });
+    const r = revenueSplit({
+      profileCode: q.profileCode, principalCents: q.advanceCents, days: q.days,
+      discountFeeCents: q.discountFeeCents, processingFeeCents: q.processingFeeCents,
+    });
+    expect(q.totalCostCents).toBe(kes(19_200));
+    expect(r.mapemaPlatformFeeCents).toBe(999989n);
+    expect(r.bankShareCents).toBe(1420011n);
+  });
+  it('direct-legacy: Mapema keeps the whole discount and fee; bank share is zero', () => {
+    const q = quote(kes(1_000_000), 48, STANDARD_PRICING);
+    const r = revenueSplit({
+      profileCode: q.profileCode, principalCents: q.advanceCents, days: q.days,
+      discountFeeCents: q.discountFeeCents, processingFeeCents: q.processingFeeCents,
+    });
+    expect(r.bankShareCents).toBe(0n);
+    expect(r.mapemaPlatformFeeCents).toBe(kes(47_300));
+    expect(r.vatPendingCounsel).toBe(true);
+  });
+  it('a maker-checker change of the margin split is honoured in the calculation', () => {
+    const q = quote(kes(1_000_000), 48, BANK_FUNDED_A_PRICING);
+    const r = revenueSplit({
+      profileCode: q.profileCode, principalCents: q.advanceCents, days: q.days,
+      discountFeeCents: q.discountFeeCents, processingFeeCents: q.processingFeeCents,
+      split: { ...DEFAULT_REVENUE_SPLIT, bankMarginShareBps: 7000 },
+    });
+    expect(r.bankMarginShareCents).toBe(divHalfUp(r.marginCents * 7000n, 10000n));
+    expect(r.mapemaMarginShareCents).toBe(r.marginCents - r.bankMarginShareCents);
   });
 });

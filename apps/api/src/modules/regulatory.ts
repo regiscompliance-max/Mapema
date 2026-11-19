@@ -9,7 +9,7 @@
  */
 import { Body, Controller, Get, Inject, Injectable, OnModuleInit, Param, Post, Res } from '@nestjs/common';
 import { z } from 'zod';
-import { AGEING_BUCKETS, ageingBucket, CollectionsPolicy, DEFAULT_COLLECTIONS_POLICY, dpd, dpdStage } from '@mapema/pricing';
+import { AGEING_BUCKETS, ageingBucket, CollectionsPolicy, DEFAULT_COLLECTIONS_POLICY, dpd, dpdStage, revenueSplit } from '@mapema/pricing';
 import { Audit, SYSTEM } from '../common/audit';
 import { Clock } from '../common/clock';
 import { ArtifactCrypto } from '../common/crypto';
@@ -50,7 +50,11 @@ function funderView(data: any, keep: (l: any) => boolean) {
     buyersOutstanding: new Set(live.map((l: any) => l.buyerKraPin)).size,
     disbursedInMonth: { count: disb.length, principalCents: s(tot(disb, 'principalCents')) },
     repaidInMonth: { principalCents: sumM('principalCents'), feesCents: sumM('feesCents'), interestCents: sumM('interestCents'), supplierBalanceCents: sumM('supplierBalanceCents') },
-    incomeInMonth: { interestCents: sumM('interestCents'), feesCents: sumM('feesCents') },
+    incomeInMonth: { interestCents: sumM('interestCents'), feesCents: sumM('feesCents'),
+      bankShareCents: s(loans.reduce((t: bigint, l: any) => t + BigInt(l.revenueSplitInMonth?.bankShareCents ?? 0), 0n)),
+      mapemaPlatformFeeCents: s(loans.reduce((t: bigint, l: any) => t + BigInt(l.revenueSplitInMonth?.mapemaPlatformFeeCents ?? 0), 0n)),
+      mapemaVatCents: s(loans.reduce((t: bigint, l: any) => t + BigInt(l.revenueSplitInMonth?.mapemaVatCents ?? 0), 0n)),
+      vatPendingCounsel: true },
     ageing, statusAtMonthEnd,
     nplRatioBps: bpsOf(BigInt(statusAtMonthEnd.non_performing.principalCents), outstanding),
     writtenOffInMonth: { count: wo.length, principalCents: s(tot(wo, 'writtenOffPrincipalCents')) },
@@ -99,10 +103,14 @@ export class RegulatoryService implements OnModuleInit {
     const adv = await this.db.query(
       `SELECT a.id, a.fineract_loan_id, a.status, a.principal_cents, a.discount_fee_cents, a.verification_fee_cents, a.disbursement_date, a.due_date, a.term_days, a.rate_bps_per_30d,
               a.npl_at, a.recourse_at, a.written_off_on, a.settled_on, a.supplier_id, a.buyer_id,
+              a.pricing_profile_code, a.processing_fee_payer, a.billed_by, a.excise_cents,
+              a.bank_share_cents, a.mapema_platform_fee_cents, a.mapema_vat_cents, a.cost_of_funds_cents,
+              d.processing_fee_cents,
               i.invoice_number, i.amount_cents AS invoice_amount_cents, b.legal_name AS buyer_name, b.kra_pin AS buyer_kra_pin, sec.code AS sector,
               sp.legal_name AS supplier_name, sp.kra_pin AS supplier_kra_pin, sp.registration_no AS supplier_reg_no,
               EXISTS (SELECT 1 FROM consent k WHERE k.org_id = a.supplier_id AND k.purpose = 'crb_enquiry_and_reporting' AND k.withdrawn_at IS NULL) AS crb_consent
        FROM advance a JOIN invoice i ON i.id = a.invoice_id JOIN organisation b ON b.id = a.buyer_id JOIN organisation sp ON sp.id = a.supplier_id LEFT JOIN sector sec ON sec.id = b.sector_id
+         LEFT JOIN price_disclosure d ON d.id = a.price_disclosure_id
        WHERE a.disbursement_date IS NOT NULL AND a.disbursement_date <= $1 AND a.status IN ('funded','late','recourse','non_performing','written_off','settled')
        ORDER BY a.disbursement_date, i.invoice_number, a.id`, [asOf]);
     const alloc = await this.db.query(
@@ -135,6 +143,21 @@ export class RegulatoryService implements OnModuleInit {
         outstandingPrincipalCents: s(writtenOff ? 0n : outstanding), writtenOffPrincipalCents: s(writtenOff ? outstanding : 0n),
         repaidInMonth: { principalCents: s(sum('principal_cents', inMonth)), feesCents: s(sum('fees_charges_cents', inMonth)), interestCents: s(sum('interest_cents', inMonth)), supplierBalanceCents: s(sum('supplier_balance_cents', inMonth)) },
         disbursedInMonth: a.disbursement_date >= monthStart, writtenOffInMonth: Boolean(writtenOff && a.written_off_on >= monthStart),
+        pricingProfileCode: a.pricing_profile_code ?? 'direct-legacy', billedBy: a.billed_by ?? 'mapema',
+        revenueSplitInMonth: (() => {
+          const interestInMonth = sum('interest_cents', inMonth);
+          const feesInMonth = sum('fees_charges_cents', inMonth);
+          const profile = a.pricing_profile_code === 'bank-funded-A' ? 'bank-funded-A' as const : 'direct-legacy' as const;
+          const disbursedInMonth = a.disbursement_date >= monthStart;
+          const processing = profile === 'bank-funded-A' && a.processing_fee_payer === 'buyer' && disbursedInMonth
+            ? toCents(a.processing_fee_cents ?? 0)
+            : feesInMonth;
+          const r = revenueSplit({
+            profileCode: profile, principalCents: principal, days: Number(a.term_days ?? 1) || 1,
+            discountFeeCents: interestInMonth, processingFeeCents: processing, exciseCents: toCents(a.excise_cents ?? 0),
+          });
+          return { bankShareCents: s(r.bankShareCents), mapemaPlatformFeeCents: s(r.mapemaPlatformFeeCents), mapemaVatCents: s(r.mapemaVatCents), costOfFundsCents: s(r.costOfFundsCents), vatPendingCounsel: r.vatPendingCounsel };
+        })(),
         dpd: days, bucket: ageingBucket(days), statusAtMonthEnd, nplAt: a.npl_at, recourseAt: a.recourse_at,
         inDuplumWaivedInMonthCents: s(waivers.filter((w) => w.advance_id === a.id && w.as_of_date >= monthStart).reduce((t, w) => t + toCents(w.amount_cents), 0n)),
         crbConsentOnFile: a.crb_consent, crbIncluded: requireConsent ? a.crb_consent : true,
@@ -180,7 +203,11 @@ export class RegulatoryService implements OnModuleInit {
         buyersOutstanding: new Set(live.map((l) => l.buyerKraPin)).size,
         disbursedInMonth: { count: disb.length, principalCents: s(tot(disb, 'principalCents')) },
         repaidInMonth: { principalCents: sumM('principalCents'), feesCents: sumM('feesCents'), interestCents: sumM('interestCents'), supplierBalanceCents: sumM('supplierBalanceCents') },
-        incomeInMonth: { interestCents: sumM('interestCents'), feesCents: sumM('feesCents') },
+        incomeInMonth: { interestCents: sumM('interestCents'), feesCents: sumM('feesCents'),
+          bankShareCents: s(loans.reduce((t, l) => t + BigInt(l.revenueSplitInMonth?.bankShareCents ?? 0), 0n)),
+          mapemaPlatformFeeCents: s(loans.reduce((t, l) => t + BigInt(l.revenueSplitInMonth?.mapemaPlatformFeeCents ?? 0), 0n)),
+          mapemaVatCents: s(loans.reduce((t, l) => t + BigInt(l.revenueSplitInMonth?.mapemaVatCents ?? 0), 0n)),
+          vatPendingCounsel: true },
         collectionsInMonthCents: s(toCents(collections.c)),
         ageing, statusAtMonthEnd,
         nplRatioBps: bpsOf(BigInt(statusAtMonthEnd.non_performing.principalCents), outstanding),

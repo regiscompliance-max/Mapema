@@ -113,7 +113,7 @@ export async function seedDemoWorld(base, o = {}) {
   await a.post('/consents', 'ap@acme.test', { orgId: buyer.id, purpose: 'crb_enquiry_and_reporting', textVersion: 'CRB-2026-11' });
   await a.post(`/organisations/${buyer.id}/submit`, 'ap@acme.test');
   await a.post(`/organisations/${buyer.id}/crb-pull`, S('credit'));
-  const prog = await a.post(`/organisations/${buyer.id}/programme`, S('credit'), { limitCents: '500000000', advanceRateBps: 8000, startDate: today, reviewDate: addDays(today, 365), decisionReason: 'DEMO programme', governmentPayerDependent: false });
+  const prog = await a.post(`/organisations/${buyer.id}/programme`, S('credit'), { limitCents: '500000000', advanceRateBps: 8000, startDate: today, reviewDate: addDays(today, 365), decisionReason: 'DEMO programme', governmentPayerDependent: false, pricingProfileCode: 'direct-legacy' });
   await approve(prog.approval.id);
   const pe = await a.post(`/organisations/${buyer.id}/agreements`, 'ap@acme.test');
   await a.post(`/dev/esign/${pe.envelopeId}/complete`);

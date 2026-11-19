@@ -18,6 +18,8 @@ export interface FineractConfig {
 export const PRODUCT_SHORT_NAME = 'MPA1';
 export const PRODUCT_NAME = 'Mapema Supplier Advance (P-F-I)';
 export const VERIFICATION_CHARGE_NAME = 'Mapema verification fee';
+export const PROCESSING_CHARGE_NAME = 'Mapema processing fee (bank-billed)';
+export const EXCISE_CHARGE_NAME = 'Excise on processing fee (pending counsel)';
 
 /** CBK order: principal -> fees and charges (fees, then penalties) -> interest. */
 export const CBK_ALLOCATION_ORDER = [
@@ -53,7 +55,7 @@ export type GlKey = keyof typeof GL_ACCOUNTS;
 
 export class FineractLedger implements LedgerAdapter {
   readonly mode: AdapterMode;
-  private setup?: { productId: number; verificationChargeId: number; gl: Record<GlKey, number> };
+  private setup?: { productId: number; verificationChargeId: number; processingChargeId: number; exciseChargeId: number; gl: Record<GlKey, number> };
 
   constructor(private readonly cfg: FineractConfig) {
     this.mode = cfg.mode ?? 'sandbox';
@@ -107,16 +109,21 @@ export class FineractLedger implements LedgerAdapter {
         : Number((await this.call('POST', '/glaccounts', { name: a.name, glCode: a.glCode, type: a.type, usage: 1, manualEntriesAllowed: true })).resourceId);
     }
 
-    // 3. Verification fee charge (flat, specified due date)
+    // 3. Fee charges (flat, specified due date). Verification is the direct-legacy fee;
+    // processing and optional excise are the bank-funded-A charges. Allocation stays P-F-I.
     const charges = (await this.call('GET', '/charges')) as unknown as Json[];
-    let charge = charges.find((c) => c.name === VERIFICATION_CHARGE_NAME);
-    if (!charge) {
+    const ensureCharge = async (name: string, amount: string) => {
+      const found = charges.find((c) => c.name === name);
+      if (found) return found;
       const r = await this.call('POST', '/charges', {
-        name: VERIFICATION_CHARGE_NAME, currencyCode: 'KES', chargeAppliesTo: 1, chargeTimeType: 2,
-        chargeCalculationType: 1, chargePaymentMode: 0, amount: '2500.00', active: true, penalty: false, locale: 'en',
+        name, currencyCode: 'KES', chargeAppliesTo: 1, chargeTimeType: 2,
+        chargeCalculationType: 1, chargePaymentMode: 0, amount, active: true, penalty: false, locale: 'en',
       });
-      charge = { id: r.resourceId };
-    }
+      return { id: r.resourceId };
+    };
+    const charge = await ensureCharge(VERIFICATION_CHARGE_NAME, '2500.00');
+    const processingCharge = await ensureCharge(PROCESSING_CHARGE_NAME, '5000.00');
+    const exciseCharge = await ensureCharge(EXCISE_CHARGE_NAME, '1000.00');
 
     // 4. Loan product
     const products = (await this.call('GET', '/loanproducts')) as unknown as Json[];
@@ -147,7 +154,7 @@ export class FineractLedger implements LedgerAdapter {
       });
       product = { id: r.resourceId };
     }
-    this.setup = { productId: Number(product.id), verificationChargeId: Number(charge.id), gl };
+    this.setup = { productId: Number(product.id), verificationChargeId: Number(charge.id), processingChargeId: Number(processingCharge.id), exciseChargeId: Number(exciseCharge.id), gl };
     return this.setup;
   }
 
@@ -166,7 +173,7 @@ export class FineractLedger implements LedgerAdapter {
   }
 
   async bookAdvance(_ctx: AdapterContext, req: LedgerLoanRequest) {
-    const { productId, verificationChargeId } = await this.ensureSetup();
+    const { productId, verificationChargeId, processingChargeId, exciseChargeId } = await this.ensureSetup();
     const rate = annualRateFromBpsPer30d(req.rateBpsPer30d);
     let loanId: number | undefined;
     try {
@@ -176,6 +183,15 @@ export class FineractLedger implements LedgerAdapter {
       if (!(e instanceof AdapterError) || e.httpStatus !== 404) throw e;
     }
     if (!loanId) {
+      const loanCharges: Json[] = [];
+      const supplierPaysFees = req.verificationFeeCents > 0n;
+      if (supplierPaysFees && req.feeChargeKind === 'processing') {
+        const processing = req.processingFeeCents ?? req.verificationFeeCents;
+        if (processing > 0n) loanCharges.push({ chargeId: processingChargeId, amount: centsToDecimal(processing), dueDate: req.dueDate });
+        if ((req.exciseCents ?? 0n) > 0n) loanCharges.push({ chargeId: exciseChargeId, amount: centsToDecimal(req.exciseCents!), dueDate: req.dueDate });
+      } else if (supplierPaysFees) {
+        loanCharges.push({ chargeId: verificationChargeId, amount: centsToDecimal(req.verificationFeeCents), dueDate: req.dueDate });
+      }
       const r = await this.call('POST', '/loans', {
         clientId: req.clientId, productId, externalId: req.externalId, loanType: 'individual', ...(req.fundId ? { fundId: req.fundId } : {}),
         principal: centsToDecimal(req.principalCents),
@@ -183,9 +199,7 @@ export class FineractLedger implements LedgerAdapter {
         interestRatePerPeriod: rate, interestType: 0, interestCalculationPeriodType: 0, amortizationType: 1,
         transactionProcessingStrategyCode: 'advanced-payment-allocation-strategy',
         expectedDisbursementDate: req.disbursementDate, submittedOnDate: req.disbursementDate,
-        charges: req.verificationFeeCents > 0n
-          ? [{ chargeId: verificationChargeId, amount: centsToDecimal(req.verificationFeeCents), dueDate: req.dueDate }]
-          : [],
+        charges: loanCharges,
         ...FineractLedger.D,
       });
       loanId = Number(r.loanId);
