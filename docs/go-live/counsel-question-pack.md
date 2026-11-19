@@ -26,6 +26,7 @@ References: Phase 0 compliance review (C-01..C-23) and questions (Q-01..Q-30); P
 | A9 | Verification fee only on funded advances: compatible with reg. 18(1)(d)? | Yes, only on funded advances, collected at settlement | Q-20 |
 | A10 | **New (bank partnership, 19 Nov 2026; research note added 19 Nov, see "A10 and A11: research so far" below):** Under model A (a licensed bank books and funds every advance, pays suppliers from its own accounts, carries the credit risk and is the secured party on the MPSRA filing; Mapema only provides technology, onboarding, verification and servicing for a platform fee and revenue share), does Mapema itself need NDTCP registration or a licence? **Sharper questions:** (a) Is Mapema outside s.2 CBK Act "non-deposit taking credit business" because it grants no credit "using own funds and assets"? (b) Does any of these pull Mapema back in: Mapema contracting with or charging the supplier directly (e.g. the KES 2,500 verification fee), Mapema setting price or limits, Mapema holding any recourse or first-loss, or the supplier master agreement naming Mapema? (c) Is Mapema a "payment service provider" under NPS Act s.2 limb (iii) ("processes or stores data on behalf of ... payment service providers") if it only sends payment instructions to the bank and never holds funds? (d) Confirm Mapema is a material outsourcing provider to the bank under CBK/PG/16 (needs the bank's prior CBK approval, para 4.1.1) and not a bank agent under CBK/PG/15; what CBK access, audit, data-location and exit clauses must the contract carry? (e) Given PG/16 para 4.1.2 (the decision to grant loans cannot be outsourced), how must the bank sign off each limit and advance in Mapema's maker-checker flow? (f) Data Protection Act: is Mapema a processor for the bank, a controller, or both, and what registration follows? (g) Does the 12 Nov 2026 Delegated Legislation Committee directive change anything for model A? | Treat Mapema as the bank's technology/outsourcing service provider, not a lender: lending switch stays off; no customer funds touch Mapema; collection account in the bank's name; bank staff are the final approver of every limit and advance; all borrower-facing fees charged by the bank. CEO chose model A on 19 Nov 2026. | Bank partnership plan (model A); research below |
 | A11 | **New (bank partnership, 19 Nov 2026; research note added 19 Nov, see "A10 and A11: research so far" below):** Can a participating bank place Mapema-originated invoice-discounting / reverse-factoring advances under the National Treasury MSME Credit Guarantee Scheme (PFM (Credit Guarantee Scheme) Regulations 2020, LN 197 of 2020)? **Sharper questions:** (a) Is the scheme (or its successor, the Kenya Credit Guarantee Company) issuing new guarantees now, and under which rules and agreement? Business Daily reported a pause on new guarantees from early 2025. (b) Is a revolving invoice-discounting line an eligible "credit facility" for "working capital" (reg. 10(1)(f)(i)), and does the KES 5m cap apply per line or per invoice? (c) The 3-month lock-in in reg. 14(11)(c) runs from the *last disbursement*; on a revolving line each drawdown restarts it. Is a 30–60 day advance ever claimable? (d) Reg. 11(a) excludes risk already covered by another guarantee or insurer: does buyer confirmation, an irrevocable letter of undertaking (ILU) or trade credit insurance count, and does it exclude the facility or only reduce cover? (e) Who is the "borrower" in reverse factoring: the supplier (an MSME) or the buyer (often not an MSME, so excluded under reg. 11(f))? (f) Standard Chartered is not a participating bank; can it join, or would only KCB's book qualify? (g) Guarantee fee level and who pays it (not stated in the Regulations or on the Treasury page). | Assume **no** CGS cover in pilot pricing until counsel and the partner bank confirm in writing. Do not mention CGS in marketing. | treasury.go.ke/credit-guarantee-scheme; research below |
+| A12 | **New (fee research, 19 Nov 2026; see "A12: fee structure under model A" below):** Under model A the pitch price is option D: 1.5% of the advance per 30 days plus a KES 5,000 verification and platform fee. The recommended structure is that the **bank** charges every supplier-facing amount: the discount fee plus a tiered processing fee of 0.5% of the invoice, minimum KES 1,500 and maximum KES 5,000, collected at funding. The bank then pays Mapema a B2B platform fee (the processing fee plus 50% of the margin over its cost of funds). **Questions:** (a) Does any fee Mapema contracts for or collects from suppliers (today's KES 2,500) risk making Mapema a credit provider under the CBK Act and LN 191? Is the bank-charged structure clean? (b) Under CBK/PG/22 para 3.4.6, must the processing fee sit in the bank's tariff, does it need s.44 Banking Act approval as a new charge, and how is it shown in the bank's TCC and APR? (c) s.44A in duplum: does a fee count as "interest" in the cap, and does collecting it at disbursement remove the question? (d) Tax: is the bank's processing fee excisable at 20% as "other fees", with the discount fee excluded as interest or return on the loan? Is Mapema's platform fee to the bank standard-rated at 16% VAT, and does the Finance Act 2026 widening of "royalty" reach it? Does "digital lender" in the Excise Duty Act now cover NDTCPs? (e) If an anchor buyer pays a programme fee instead, is that outside the supplier's cost of credit, and does it ease the CAK buyer-power risk? (f) Is a small supplier a "consumer" under the Consumer Protection Act 2012? | Until answered, no live supplier pricing changes. The platform still models the KES 2,500 verification fee as a fee (A4, A9). Under model A, design for the bank to charge all supplier-facing amounts. | Bank partnership plan, Fee research; research below |
 
 ### A10 and A11: research so far (19 Nov 2026, not legal advice)
 
@@ -111,6 +112,62 @@ on today (medium-low).**
   Sources: [CBK press release](https://www.centralbank.go.ke/uploads/press_releases/825716068_Press%20Release%20-%20A%20Revolution%20in%20the%20Financing%20of%20MSMEs.pdf);
   [Citizen Digital](https://citizen.digital/article/gachora-why-stawi-died-a-natural-death-n295211). Neither covers invoice finance (medium).
 - No 2023 or 2024 amendment to the CGS Regulations was found (not found ≠ does not exist; counsel to check).
+
+### A12: fee structure under model A, research so far (19 Nov 2026, not legal or tax advice)
+
+Desk research for counsel and a tax adviser to confirm. Confidence uses the same scale as A10 and A11.
+
+- **Who may charge the supplier.** CBK/PG/22 (Consumer Protection) para 3.4.6(b)–(d) lets a bank's product carry
+  **third-party fees**, but the bank must disclose them in advance, and the third party "must be approved by the
+  Central Bank of Kenya" under the Outsourcing or Agent Banking guidelines. Para 3.4.5(ii)–(iii): the **total cost of
+  credit includes all fees, charges and commissions, including charges paid to third-party providers**. So the fee
+  counts in the bank's TCC and APR whoever collects it. **High** (primary text). Source:
+  [CBK Prudential Guidelines, CBK/PG/22, pp. 499–500](https://www.centralbank.go.ke/wp-content/uploads/2016/08/PRUDENTIAL-GUIDELINES.pdf);
+  cost-of-credit portal: [Banking Circular No. 3 of 2017](https://regalert.today/document/banking-circular-no-3-of-2017-cost-of-credit-website-portal-fcfbf4b0-78ab-4f40-aeb4-985097e4048d) (secondary copy, medium).
+- **NDTCP risk.** The 2025 draft defines "charges" as payments a customer makes to a credit provider "in consideration
+  of the loan" (draft reg. 3). Law-firm commentary says classification follows substance, including who sets terms
+  and collects. A fee that Mapema **contracts for and collects from the supplier** in return for funding is the
+  clearest fact that could make Mapema look like a credit provider. A fee the **bank** charges and shares with Mapema
+  under an outsourcing contract is not. **Medium/low** (inference from the draft and commentary; see A10). The draft
+  also bars NDTCPs from "registration fees or membership fees from loan applicants" (draft reg. on prohibited
+  activities (c); see A9). That supports charging only on funded invoices.
+- **Banking Act s.44**: "No institution shall increase its rate of banking or other charges except with the prior
+  approval of the Cabinet Secretary". The Supreme Court held in *Stanbic v Santowels* [2024] KESC 31 that this
+  includes interest rates. A new or higher fee in the bank's tariff may therefore need approval: that is the bank's
+  process, and one more reason the bank should own the tariff. **High** for the text and holding, **low** for how it
+  applies to a new product fee. Sources: [Banking Act (CBK copy), s.44](https://www.centralbank.go.ke/wp-content/uploads/2026/03/Banking-Act.pdf);
+  [Dentons HHM on Santowels, 1 Jul 2024](https://www.dentonshhm.com/en/insights/alerts/2024/july/1/supreme-court-settles-the-applicability-of-section-44-of-the-banking-act-on-interest-rates).
+- **In duplum, s.44A**: on a non-performing loan the bank may recover only principal, contractual interest up to that
+  principal, and recovery expenses (s.44A(2)). "Loan" includes "any advance, credit facility" (s.44A(5)(b)). Fees are
+  not listed separately, so whether an unpaid fee counts as "interest" within the cap, or is irrecoverable once the
+  loan is non-performing, needs counsel. Collecting the fee at disbursement (netted from the advance) avoids the
+  question. **High** (text), **low** (fee treatment). Same source.
+- **Excise duty.** The Excise Duty Act charges 20% on "other fees charged by financial institutions". This is defined as
+  fees, charges or commissions "relating to their licensed activities", excluding interest or return on a loan. A
+  financial institution is a person licensed under the Banking Act, CBK Act, Insurance Act or Microfinance Act. Digital
+  lenders' fees are also 20%. A **bank-charged** processing or verification fee is therefore likely excisable at 20%
+  (KES 1,000 on KES 5,000). The discount fee is likely excluded if it is treated as interest or return on the loan.
+  Mapema, not being licensed, would likely charge **VAT at 16%** on a fee it charged directly instead. **Medium.**
+  Sources: [Excise Duty Act (Kenya Law), First Schedule Part II](https://new.kenyalaw.org/akn/ke/act/2015/23);
+  [PwC Kenya](https://www.pwc.com/ke/en/blog/excise-duty.html); [Deloitte on the Finance Act 2021 "other fees" change](https://www.deloitte.com/content/dam/assets-zone1/za/en/docs/services/tax/2023/Tax%20Alert%20-%20The%20Finance%20Act%202021_13%2007%202021.pdf).
+  Not found: whether "digital lender" in the Excise Act now covers NDTCPs licensed under LN 191.
+- **VAT.** Financial-services exemptions are in the VAT Act 2013 **First Schedule, Part II, para 1** (not the Second
+  Schedule), including "(h) the making of any advances or the granting of any credit". The Finance Act 2026 removed
+  the exemption for payment processing, settlement, gateway or aggregation services supplied over a platform by a
+  payment service provider. Mapema's B2B platform fee to the bank is most likely **standard-rated at 16%**, and a bank
+  making exempt supplies may not recover that input VAT, so it is a real cost in the split. **Medium** for the
+  structure, **low** for Mapema's classification. Sources: [KCB v Commissioner, TAT 2025, paras 112–115](https://new.kenyalaw.org/akn/ke/judgment/ketat/2025/2/eng%402025-01-17);
+  [EY on the Finance Act 2026](https://globaltaxnews.ey.com/news/2026-1445-kenya-enacts-finance-act-2026).
+  The Finance Act 2026 also widened "royalty" for withholding tax to cover payments for "access to ... payment networks
+  and payment processing systems". Counsel should confirm it does not catch the bank's platform fee to Mapema (low).
+- **Competition Act (CAK).** Abuse of buyer power includes delayed payment and "transferring commercial risks and
+  operational costs to suppliers". Buyer–supplier contracts must state payment terms. An anchor that lengthens terms and
+  pushes the programme's cost onto suppliers carries some risk under this heading. **Medium** (CAK guidance). Source:
+  [CAK, Demystifying abuse of buyer power](https://www.cak.go.ke/demystifying-abuse-buyer-power-kenyan-economy).
+- **Consumer Protection Act 2012**: s.2 "consumer" is broad enough that a small supplier could qualify. It is not
+  clearly excluded. **Low.** Source: [CPA 2012 (Parliament copy)](https://www.parliament.go.ke/sites/default/files/2017-05/ConsumerProtectionActNo46of2012.pdf).
+- **Third-party cost floor.** A Collateral Registry search costs KES 500, and registering or cancelling a notice is free.
+  **High.** Source: [BRS fee schedule](https://brs.go.ke/fee-schedule-collateral-registry/).
 
 ## B. Credit risk, NPLs and collections
 
