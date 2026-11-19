@@ -49,6 +49,13 @@ export class OnboardingService implements OnModuleInit {
       const p = (await c.query(`SELECT buyer_id FROM buyer_programme WHERE id = $1`, [a.entity_id])).rows[0];
       await c.query(`UPDATE organisation SET status = 'approved', updated_at = now() WHERE id = $1`, [p.buyer_id]);
     });
+    this.approvals.register('programme_pricing_profile_change', async (c, a) => {
+      const p = a.payload;
+      const r = (await c.query(
+        `UPDATE buyer_programme SET pricing_profile_code = $2, processing_fee_payer = $3, lender_display_name = $4 WHERE id = $1 RETURNING *`,
+        [a.entity_id, p.pricingProfileCode, p.processingFeePayer, p.lenderDisplayName ?? null])).rows[0];
+      if (!r) throw notFound('Programme');
+    });
     this.approvals.register('supplier_limit_set', async (c, a) => {
       await c.query(`UPDATE supplier_link SET supplier_limit_cents = $2 WHERE id = $1`, [a.entity_id, a.payload.limitCents]);
       const l = (await c.query(`SELECT supplier_id FROM supplier_link WHERE id = $1`, [a.entity_id])).rows[0];
@@ -411,7 +418,7 @@ export class OnboardingService implements OnModuleInit {
     });
   }
 
-  async proposeProgramme(u: AuthUser, buyerId: string, b: { limitCents: bigint; advanceRateBps: number; startDate: string; reviewDate: string; decisionReason: string; governmentPayerDependent: boolean; governmentPayerNote?: string }) {
+  async proposeProgramme(u: AuthUser, buyerId: string, b: { limitCents: bigint; advanceRateBps: number; startDate: string; reviewDate: string; decisionReason: string; governmentPayerDependent: boolean; governmentPayerNote?: string; pricingProfileCode?: 'direct-legacy' | 'bank-funded-A'; processingFeePayer?: 'supplier' | 'buyer'; lenderDisplayName?: string }) {
     const pricing = await this.settings.activePricing();
     if (!pricing) throw unprocessable('NO_ACTIVE_PRICING', 'No active pricing version with a CBK approval reference');
     if (b.advanceRateBps > pricing.advance_rate_bps) throw unprocessable('ADVANCE_RATE_TOO_HIGH', `Advance rate cannot exceed the pricing version (${pricing.advance_rate_bps} bps)`);
@@ -427,11 +434,36 @@ export class OnboardingService implements OnModuleInit {
         [buyerId, b.governmentPayerDependent, note || null, u.id]);
       const crb = (await c.query(`SELECT id FROM credit_check WHERE subject_org_id = $1`, [buyerId])).rows[0];
       if (!crb) throw unprocessable('CRB_REQUIRED', 'Pull a CRB report before proposing a limit');
+      const profileCode = b.pricingProfileCode ?? 'bank-funded-A';
+      const payer = b.processingFeePayer ?? 'supplier';
+      const profile = (await c.query(`SELECT code FROM pricing_profile WHERE code = $1`, [profileCode])).rows[0];
+      if (!profile) throw unprocessable('UNKNOWN_PRICING_PROFILE', `Unknown pricing profile ${profileCode}`);
+      if (profileCode === 'direct-legacy' && payer === 'buyer') {
+        throw unprocessable('BUYER_PAYS_NOT_APPLICABLE', 'Buyer-pays applies only to the bank-funded-A processing fee');
+      }
       const p = (await c.query(
-        `INSERT INTO buyer_programme (buyer_id, pricing_version_id, advance_rate_bps, limit_cents, start_date, review_date, status) VALUES ($1,$2,$3,$4,$5,$6,'proposed') RETURNING *`,
-        [buyerId, pricing.id, b.advanceRateBps, b.limitCents, b.startDate, b.reviewDate])).rows[0];
-      const appr = await this.approvals.propose(c, u, { action: 'buyer_programme_approve', entityType: 'buyer_programme', entityId: p.id, payload: { limitCents: b.limitCents.toString(), advanceRateBps: b.advanceRateBps, reviewDate: b.reviewDate }, requiredRole: 'ceo', reason: b.decisionReason });
+        `INSERT INTO buyer_programme (buyer_id, pricing_version_id, advance_rate_bps, limit_cents, start_date, review_date, status, pricing_profile_code, processing_fee_payer, lender_display_name)
+         VALUES ($1,$2,$3,$4,$5,$6,'proposed',$7,$8,$9) RETURNING *`,
+        [buyerId, pricing.id, b.advanceRateBps, b.limitCents, b.startDate, b.reviewDate, profileCode, payer, b.lenderDisplayName ?? null])).rows[0];
+      const appr = await this.approvals.propose(c, u, { action: 'buyer_programme_approve', entityType: 'buyer_programme', entityId: p.id, payload: { limitCents: b.limitCents.toString(), advanceRateBps: b.advanceRateBps, reviewDate: b.reviewDate, pricingProfileCode: profileCode, processingFeePayer: payer, lenderDisplayName: b.lenderDisplayName ?? null }, requiredRole: 'ceo', reason: b.decisionReason });
       return { programme: p, approval: appr };
+    });
+  }
+
+  async proposeProgrammePricing(u: AuthUser, buyerId: string, b: { pricingProfileCode: 'direct-legacy' | 'bank-funded-A'; processingFeePayer: 'supplier' | 'buyer'; lenderDisplayName?: string }) {
+    if (b.pricingProfileCode === 'direct-legacy' && b.processingFeePayer === 'buyer') {
+      throw unprocessable('BUYER_PAYS_NOT_APPLICABLE', 'Buyer-pays applies only to the bank-funded-A processing fee');
+    }
+    return this.db.tx(async (c) => {
+      const p = (await c.query(`SELECT * FROM buyer_programme WHERE buyer_id = $1 AND status IN ('approved','live') ORDER BY created_at DESC LIMIT 1`, [buyerId])).rows[0];
+      if (!p) throw notFound('Programme');
+      const profile = (await c.query(`SELECT code FROM pricing_profile WHERE code = $1`, [b.pricingProfileCode])).rows[0];
+      if (!profile) throw unprocessable('UNKNOWN_PRICING_PROFILE', `Unknown pricing profile ${b.pricingProfileCode}`);
+      return this.approvals.propose(c, u, {
+        action: 'programme_pricing_profile_change', entityType: 'buyer_programme', entityId: p.id,
+        payload: { pricingProfileCode: b.pricingProfileCode, processingFeePayer: b.processingFeePayer, lenderDisplayName: b.lenderDisplayName ?? null, before: { pricingProfileCode: p.pricing_profile_code, processingFeePayer: p.processing_fee_payer, lenderDisplayName: p.lender_display_name } },
+        requiredRole: 'ceo', reason: 'Change the programme pricing profile, who pays the processing fee, or the named funding bank',
+      });
     });
   }
 
@@ -592,8 +624,23 @@ export class OnboardingController {
   @Roles('credit')
   programme(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() b: unknown) {
     const body = z.object({ limitCents: zPositiveCents, advanceRateBps: z.number().int().min(1).max(10000), startDate: zDate, reviewDate: zDate, decisionReason: zText(1000),
-      governmentPayerDependent: z.boolean(), governmentPayerNote: z.string().max(2000).optional() }).parse(b);
+      governmentPayerDependent: z.boolean(), governmentPayerNote: z.string().max(2000).optional(),
+      pricingProfileCode: z.enum(['direct-legacy', 'bank-funded-A']).optional(),
+      processingFeePayer: z.enum(['supplier', 'buyer']).optional(),
+      lenderDisplayName: zText(120).optional(),
+    }).parse(b);
     return this.s.proposeProgramme(u, zOrgId.parse(id), body);
+  }
+
+  @Post('organisations/:id/programme/pricing-profile')
+  @Roles('credit')
+  programmePricing(@CurrentUser() u: AuthUser, @Param('id') id: string, @Body() b: unknown) {
+    const body = z.object({
+      pricingProfileCode: z.enum(['direct-legacy', 'bank-funded-A']),
+      processingFeePayer: z.enum(['supplier', 'buyer']).default('supplier'),
+      lenderDisplayName: zText(120).optional(),
+    }).parse(b);
+    return this.s.proposeProgrammePricing(u, zOrgId.parse(id), body);
   }
 
   @Post('supplier-links/:id/limit')

@@ -9,7 +9,7 @@
 
 | Criterion | Status | Evidence |
 | --- | --- | --- |
-| Worked example end to end with correct fees, repayment order and payouts | ✅ **locally**, through the HTTP API, against the mock ledger **and a real Apache Fineract 1.16.1**. Also clicked through the web UI against a seeded local stack | `apps/api/test/worked-example.e2e.test.ts`, `packages/adapters/test/fineract.live.test.ts`, `scripts/ui-smoke.mjs`, [qa-report.md](qa-report.md) |
+| Worked example end to end with correct fees, repayment order and payouts (preserved under the direct-legacy profile, D-82) | ✅ **locally**, through the HTTP API, against the mock ledger **and a real Apache Fineract 1.16.1**. Also clicked through the web UI against a seeded local stack | `apps/api/test/worked-example.e2e.test.ts`, `packages/adapters/test/fineract.live.test.ts`, `scripts/ui-smoke.mjs`, [qa-report.md](qa-report.md) |
 | …in **staging** | ❌ **Not met.** No staging exists, and the instruction was not to deploy anywhere or create accounts | Docker/CI/Keycloak files are written but not run |
 | All tests green | ✅ 103/103 (mock ledger) and 56/56 (real Fineract) | [qa-report.md](qa-report.md) |
 | Pen-test findings fixed | ❌ **Not met.** No independent pen test has been done (needs a vendor and a deployed staging). An internal security review was done and its findings fixed | [security-checklist.md](security-checklist.md) |

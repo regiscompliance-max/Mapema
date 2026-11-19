@@ -22,7 +22,7 @@ export function CreditFile({ orgId, onClose, canCredit }: { orgId: string; onClo
     const cents = parseKesInput(v.limit); const rate = Math.round(Number(v.rate) * 100);
     void run(async () => {
       if (cents === null) throw Object.assign(new Error('Enter the limit in KES'), { code: 'BAD_AMOUNT' });
-      await api(`/organisations/${orgId}/programme`, { body: { limitCents: cents.toString(), advanceRateBps: rate, startDate: v.start, reviewDate: v.review, decisionReason: v.reason, governmentPayerDependent: Boolean(v.govdep), governmentPayerNote: v.govnote || undefined } });
+      await api(`/organisations/${orgId}/programme`, { body: { limitCents: cents.toString(), advanceRateBps: rate, startDate: v.start, reviewDate: v.review, decisionReason: v.reason, governmentPayerDependent: Boolean(v.govdep), governmentPayerNote: v.govnote || undefined, pricingProfileCode: v.profile || 'bank-funded-A', processingFeePayer: v.buyerPays ? 'buyer' : 'supplier', lenderDisplayName: v.lender || undefined } });
     }, 'Programme proposed - the CEO must approve').then(org.reload);
   };
   const setLimit = (linkId: string, buyerName: string) => run(async () => {
@@ -37,7 +37,7 @@ export function CreditFile({ orgId, onClose, canCredit }: { orgId: string; onClo
       {o && <div className="card grid gap-1 text-sm sm:grid-cols-2">
         <p>Type: <strong>{o.type}</strong></p><p>Status: <StatusPill s={o.status} /></p><p>KRA PIN: {o.kra_pin}</p><p>Registration: {o.registration_no}</p>
         {f && <p>Exposure: {kesFromCents(buyer ? f.exposure.buyerCents : f.exposure.supplierCents)}</p>}
-        {buyer && o.programme && <p>Programme: {kesFromCents(o.programme.limit_cents)} · {o.programme.status} · review {day(o.programme.review_date)}</p>}
+        {buyer && o.programme && <p>Programme: {kesFromCents(o.programme.limit_cents)} · {o.programme.status} · {o.programme.pricing_profile_code ?? 'direct-legacy'} · review {day(o.programme.review_date)}</p>}
         {buyer && <p data-story="P4-8">Government-payer dependent: <strong>{f?.governmentPayerDependent === true ? 'yes' : f?.governmentPayerDependent === false ? 'no' : 'not recorded'}</strong>{f?.governmentPayerNote ? ` — ${f.governmentPayerNote}` : ''}{f?.sectorCode === 'CONS' ? ' (construction)' : ''}</p>}
       </div>}
       <Msg msg={msg} />
@@ -57,8 +57,23 @@ export function CreditFile({ orgId, onClose, canCredit }: { orgId: string; onClo
           <Field label="Start date"><input name="start" required type="date" className="input" /></Field>
           <Field label="Review date"><input name="review" required type="date" className="input" /></Field>
           <Field label="Decision reason" className="sm:col-span-2"><textarea name="reason" required rows={3} className="input" /></Field>
+          <Field label="Pricing profile"><select name="profile" className="input" defaultValue="bank-funded-A"><option value="bank-funded-A">Bank-funded (model A)</option><option value="direct-legacy">Direct (legacy)</option></select></Field>
+          <Field label="Funding bank name (shown to suppliers)"><input name="lender" className="input" /></Field>
+          <label className="flex gap-2 text-sm sm:col-span-2"><input type="checkbox" name="buyerPays" /> Buyer pays the processing fee</label>
           <GovernmentPayerFields />
           <button className="btn sm:col-span-2" disabled={busy}>Propose programme</button>
+        </form>
+      )}
+      {buyer && canCredit && o?.programme && ['approved','live'].includes(o.programme.status) && (
+        <form onSubmit={(e) => {
+          e.preventDefault(); const v = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
+          void run(() => api(`/organisations/${orgId}/programme/pricing-profile`, { body: { pricingProfileCode: v.profile, processingFeePayer: v.buyerPays ? 'buyer' : 'supplier', lenderDisplayName: v.lender || undefined } }), 'Proposed - the CEO must approve').then(org.reload);
+        }} className="card grid gap-3 sm:grid-cols-2">
+          <h3 className="h2 sm:col-span-2">Change programme pricing (CEO approves)</h3>
+          <Field label="Pricing profile"><select name="profile" className="input" defaultValue={o.programme.pricing_profile_code ?? 'direct-legacy'}><option value="bank-funded-A">Bank-funded (model A)</option><option value="direct-legacy">Direct (legacy)</option></select></Field>
+          <Field label="Funding bank name (shown to suppliers)"><input name="lender" className="input" defaultValue={o.programme.lender_display_name ?? ''} /></Field>
+          <label className="flex gap-2 text-sm sm:col-span-2"><input type="checkbox" name="buyerPays" defaultChecked={o.programme.processing_fee_payer === 'buyer'} /> Buyer pays the processing fee</label>
+          <button className="btn sm:col-span-2" disabled={busy}>Propose pricing change</button>
         </form>
       )}
       {!buyer && canCredit && o?.supplierLinks?.length > 0 && (

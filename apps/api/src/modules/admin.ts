@@ -45,6 +45,14 @@ export class SettingsService implements OnModuleInit {
       await c.query(`INSERT INTO limit_config (subject, subject_org_id, subject_sector_id, pct_of_float_bps, absolute_cap_cents, approved_via) VALUES ($1,$2,$3,$4,$5,$6)`,
         [p.subject, p.subjectOrgId ?? null, p.subjectSectorId ?? null, p.pctOfFloatBps ?? null, p.absoluteCapCents ?? null, a.id]);
     });
+    this.approvals.register('revenue_split_change', async (c, a) => {
+      const p = a.payload;
+      await c.query(
+        `INSERT INTO revenue_split_config (cost_of_funds_annual_ppm, bank_margin_share_bps, vat_rate_bps, vat_pending_counsel,
+           excise_on_processing_fee, excise_rate_bps, excise_pending_counsel, approved_via, effective_from)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8, now())`,
+        [p.costOfFundsAnnualPpm, p.bankMarginShareBps, p.vatRateBps, p.vatPendingCounsel, p.exciseOnProcessingFee, p.exciseRateBps, p.excisePendingCounsel, a.id]);
+    });
   }
 
   async lending(q: Q = this.db.pool): Promise<{ enabled: boolean; cbk_licence_no: string | null }> {
@@ -129,6 +137,28 @@ export class SettingsService implements OnModuleInit {
     for (const [name, a] of Object.entries(this.adapters)) out.push({ name, ...(await (a as any).health()) });
     return out;
   }
+
+  async currentRevenueSplit(q: Q = this.db.pool): Promise<any> {
+    const r = (await q.query(`SELECT * FROM revenue_split_config ORDER BY effective_from DESC, created_at DESC LIMIT 1`)).rows[0];
+    if (!r) {
+      return {
+        cost_of_funds_annual_ppm: 87450, bank_margin_share_bps: 5000, vat_rate_bps: 1600, vat_pending_counsel: true,
+        excise_on_processing_fee: false, excise_rate_bps: 2000, excise_pending_counsel: true,
+      };
+    }
+    return r;
+  }
+
+  async proposeRevenueSplit(u: AuthUser, p: {
+    costOfFundsAnnualPpm: number; bankMarginShareBps: number; vatRateBps: number; vatPendingCounsel: boolean;
+    exciseOnProcessingFee: boolean; exciseRateBps: number; excisePendingCounsel: boolean;
+  }) {
+    return this.db.tx((c) => this.approvals.propose(c, u, {
+      action: 'revenue_split_change', entityType: 'revenue_split_config',
+      entityId: '00000000-0000-0000-0000-0000000000a1',
+      payload: p, requiredRole: 'ceo', reason: 'Update bank cost of funds, margin split or pending-counsel tax flags',
+    }));
+  }
 }
 
 @Controller('admin')
@@ -141,6 +171,8 @@ export class AdminController {
     return {
       lending: await this.s.lending(), invoiceMinimumCents: await this.s.invoiceMinimum(), floatCents: await this.s.currentFloat(),
       pricing: await this.db.query(`SELECT * FROM pricing_version ORDER BY created_at DESC`),
+      pricingProfiles: await this.db.query(`SELECT * FROM pricing_profile ORDER BY code`),
+      revenueSplit: await this.s.currentRevenueSplit(),
       limits: await this.db.query(`SELECT * FROM limit_config WHERE active ORDER BY subject`),
       environment: this.cfg.APP_ENV,
     };
@@ -196,5 +228,24 @@ export class AdminController {
       pctOfFloatBps: z.number().int().min(0).max(10000).optional(), absoluteCapCents: zCents.optional(),
     }).refine((x) => x.pctOfFloatBps !== undefined || x.absoluteCapCents !== undefined, 'pctOfFloatBps or absoluteCapCents required').parse(b);
     return this.s.proposeLimit(u, body);
+  }
+
+  @Get('revenue-split')
+  @Roles('admin', 'ceo', 'credit', 'ops', 'compliance')
+  revenueSplit() { return this.s.currentRevenueSplit(); }
+
+  @Post('revenue-split')
+  @Roles('admin', 'credit')
+  proposeRevenueSplit(@CurrentUser() u: AuthUser, @Body() b: unknown) {
+    const body = z.object({
+      costOfFundsAnnualPpm: z.number().int().min(0).max(1_000_000),
+      bankMarginShareBps: z.number().int().min(0).max(10000),
+      vatRateBps: z.number().int().min(0).max(10000).default(1600),
+      vatPendingCounsel: z.boolean().default(true),
+      exciseOnProcessingFee: z.boolean().default(false),
+      exciseRateBps: z.number().int().min(0).max(10000).default(2000),
+      excisePendingCounsel: z.boolean().default(true),
+    }).parse(b);
+    return this.s.proposeRevenueSplit(u, body);
   }
 }

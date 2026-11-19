@@ -8,7 +8,7 @@ licensed**; lending stays switched off until the licence number is entered and a
 
 | Phase | Criterion | Status | Blocked on |
 | --- | --- | --- | --- |
-| 1 | Worked example (KES 1,000,000, 48 days: 800,000 advance, 44,800 discount fee, 2,500 verification, 847,300 to Mapema, 152,700 to the supplier) end to end with correct fees, repayment order and payouts | ✅ locally on mock and real Fineract 1.16.1 · ❌ in staging | ⛔ Deng: cloud account (staging-plan.md) |
+| 1 | Worked example under the direct-legacy profile (D-82; KES 1,000,000, 48 days: 800,000 advance, 44,800 discount fee, 2,500 verification, 847,300 to Mapema, 152,700 to the supplier) end to end with correct fees, repayment order and payouts. The bank-funded-A example (19,200 + 5,000 = 24,200, balance 175,800) is covered in pricing-model-a tests. | ✅ locally on mock and real Fineract 1.16.1 · ❌ in staging | ⛔ Deng: cloud account (staging-plan.md) |
 | 1 | All tests green | ✅ (qa-report.md) | — |
 | 1 | Pen-test findings fixed | ❌ no independent test yet | ⛔ Deng: pick a firm (pentest-scope-and-rfp.md), after staging |
 | 2 | Monthly CBK and lender reports with no manual edits | ✅ lender pack · 🟡 CBK return and CRB file DRAFT | ⛔ CBK template, CRB specification (Q-A) |

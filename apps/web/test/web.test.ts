@@ -5,7 +5,7 @@ import en from '../lib/messages/en.json';
 import sw from '../lib/messages/sw.json';
 import { DICTS, translate } from '../lib/i18n';
 import { bps, kesFromCents, parseKesInput } from '../lib/money';
-import { quote, STANDARD_PRICING } from '@mapema/pricing';
+import { BANK_FUNDED_A_PRICING, quote, STANDARD_PRICING } from '@mapema/pricing';
 
 const walk = (d: string): string[] => readdirSync(d).flatMap((f) => { const p = join(d, f); return statSync(p).isDirectory() ? walk(p) : /\.tsx?$/.test(f) ? [p] : []; });
 
@@ -43,12 +43,22 @@ describe('money input and display', () => {
 });
 
 describe('public fee calculator uses the same engine as the API', () => {
-  it('worked example: KES 1,000,000 for 48 days', () => {
+  it('direct-legacy worked example: KES 1,000,000 for 48 days', () => {
     const q = quote(100000000n, 48, STANDARD_PRICING);
     expect(q.advanceCents).toBe(80000000n);
     expect(q.discountFeeCents).toBe(4480000n);
     expect(q.totalCostCents).toBe(4730000n);
     expect(q.aprBps).toBe(4496);
     expect(q.supplierBalanceCents).toBe(15270000n);
+  });
+  it('bank-funded-A default: KES 1,000,000 for 48 days is 19,200 + 5,000 = 24,200', () => {
+    const q = quote(100000000n, 48, BANK_FUNDED_A_PRICING);
+    expect(q.advanceCents).toBe(80000000n);
+    expect(q.discountFeeCents).toBe(1920000n);
+    expect(q.processingFeeCents).toBe(500000n);
+    expect(q.totalCostCents).toBe(2420000n);
+    expect(q.supplierBalanceCents).toBe(17580000n);
+    expect(q.aprBps).toBe(2300);
+    expect(q.billedBy).toBe('funding_bank');
   });
 });

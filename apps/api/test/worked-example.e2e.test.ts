@@ -2,6 +2,7 @@
  * [QA Engineer] TC-E2E-01 - THE WORKED EXAMPLE, end to end through the HTTP API
  * (brief Phase 1 "done when"): KES 1,000,000 invoice, 48 days, 80% advance, 3.5%/30d, KES 2,500
  * verification fee. Buyer pays the full invoice on the due date.
+ * This is the direct-legacy profile (D-82); the bank-funded-A examples live in pricing-model-a.e2e.test.ts.
  * Expected: advance 800,000.00; interest 44,800.00; fee 2,500.00; supplier balance 152,700.00;
  * repayment applied principal -> fees -> interest; balance released by ops; reconciliation balanced.
  * Ledger: MockLedger by default. With E2E_LEDGER=fineract the SAME test runs against a real

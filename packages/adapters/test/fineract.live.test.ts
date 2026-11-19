@@ -6,7 +6,7 @@
  * balances for the trial balance / reconciliation.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
-import { addDays, kes, quote, todayEAT } from '@mapema/pricing';
+import { addDays, BANK_FUNDED_A_PRICING, kes, quote, todayEAT } from '@mapema/pricing';
 import { FineractLedger } from '../src';
 
 const cfg = {
@@ -112,5 +112,22 @@ describe('Fineract funding tags (Phase 3 TC-P3U-FUND-04, real Fineract)', () => 
     await ledger.setFundingTag(loanId, 'P3-EQUITY', addDays(disb, 5));
     expect(await ledger.getFundingTag(loanId)).toEqual({ fundId: fa, tagCode: 'P3-EQUITY' }); // fund at origination is immutable once active; the tag moves
     expect((await ledger.getLoan(loanId)).interestChargedCents).toBe(kes(44_800)); // money unchanged
+  }, 60000);
+
+  it('TC-FIN-A bank-funded-A books 19,200 interest and a 5,000 processing fee; allocation stays principal then fees then interest', async () => {
+    const q = quote(kes(1_000_000), 48, BANK_FUNDED_A_PRICING);
+    const { loanId, scheduledInterestCents } = await ledger.bookAdvance(ctx, {
+      externalId: `proof-${run}-bank-a`, clientId, principalCents: q.advanceCents, rateBpsPer30d: q.discountRateBpsPer30d, days: 48,
+      disbursementDate: disb, dueDate: due, verificationFeeCents: q.verificationFeeCents,
+      feeChargeKind: 'processing', processingFeeCents: q.processingFeeCents, exciseCents: q.exciseCents,
+    });
+    expect(scheduledInterestCents).toBe(kes(19_200));
+    const l = await ledger.getLoan(loanId);
+    expect(l.principalOutstandingCents).toBe(kes(800_000));
+    expect(l.feesOutstandingCents).toBe(kes(5_000));
+    const repayment = await ledger.repay(ctx, loanId, kes(1_000_000), due, `proof-${run}-bank-a-repay`);
+    expect(repayment.principalCents).toBe(kes(800_000));
+    expect(repayment.feesCents).toBe(kes(5_000));
+    expect(repayment.interestCents).toBe(kes(19_200));
   }, 60000);
 });
