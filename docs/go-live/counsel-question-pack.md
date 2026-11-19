@@ -24,8 +24,93 @@ References: Phase 0 compliance review (C-01..C-23) and questions (Q-01..Q-30); P
 | A7 | After the due date: any late charge allowed? | None; discount fee stops at the due date | Q-08 |
 | A8 | "One flat fee" slogan | Replaced; counsel to approve final marketing wording | Q-02 |
 | A9 | Verification fee only on funded advances: compatible with reg. 18(1)(d)? | Yes, only on funded advances, collected at settlement | Q-20 |
-| A10 | **New (bank partnership, 19 Nov 2026):** Under model A (white-label platform: a licensed bank books and funds every advance, pays suppliers from its own accounts and is the secured party on the MPSRA filing; Mapema only provides the technology and verification and earns a platform fee and revenue share), does Mapema itself need NDTCP registration or a licence under the CBK (NDTCP) Regulations 2026? Does onboarding suppliers or a fee share make Mapema a bank agent or payment service provider? What must the bank's CBK outsourcing approval (CBK/PG/16) and the outsourcing agreement contain? | Treat Mapema as the bank's technology service provider, not a lender; lending switch stays off; no customer funds touch Mapema. CEO chose model A on 19 Nov 2026. | Bank partnership plan (model A) |
-| A11 | **New (bank partnership, 19 Nov 2026):** Does the National Treasury MSME Credit Guarantee Scheme (PFM (Credit Guarantee Scheme) Regulations 2020) cover invoice finance / reverse-factoring advances booked by a participating bank (e.g. KCB, Stanbic, Co-op, NCBA, Absa, DTB, Credit Bank), given its KES 5m cap and the rule that two facilities cannot run concurrently? | Assume **no** CGS cover in pilot pricing until counsel and the partner bank confirm. | treasury.go.ke/credit-guarantee-scheme |
+| A10 | **New (bank partnership, 19 Nov 2026; research note added 19 Nov, see "A10 and A11: research so far" below):** Under model A (a licensed bank books and funds every advance, pays suppliers from its own accounts, carries the credit risk and is the secured party on the MPSRA filing; Mapema only provides technology, onboarding, verification and servicing for a platform fee and revenue share), does Mapema itself need NDTCP registration or a licence? **Sharper questions:** (a) Is Mapema outside s.2 CBK Act "non-deposit taking credit business" because it grants no credit "using own funds and assets"? (b) Does any of these pull Mapema back in: Mapema contracting with or charging the supplier directly (e.g. the KES 2,500 verification fee), Mapema setting price or limits, Mapema holding any recourse or first-loss, or the supplier master agreement naming Mapema? (c) Is Mapema a "payment service provider" under NPS Act s.2 limb (iii) ("processes or stores data on behalf of ... payment service providers") if it only sends payment instructions to the bank and never holds funds? (d) Confirm Mapema is a material outsourcing provider to the bank under CBK/PG/16 (needs the bank's prior CBK approval, para 4.1.1) and not a bank agent under CBK/PG/15; what CBK access, audit, data-location and exit clauses must the contract carry? (e) Given PG/16 para 4.1.2 (the decision to grant loans cannot be outsourced), how must the bank sign off each limit and advance in Mapema's maker-checker flow? (f) Data Protection Act: is Mapema a processor for the bank, a controller, or both, and what registration follows? (g) Does the 12 Nov 2026 Delegated Legislation Committee directive change anything for model A? | Treat Mapema as the bank's technology/outsourcing service provider, not a lender: lending switch stays off; no customer funds touch Mapema; collection account in the bank's name; bank staff are the final approver of every limit and advance; all borrower-facing fees charged by the bank. CEO chose model A on 19 Nov 2026. | Bank partnership plan (model A); research below |
+| A11 | **New (bank partnership, 19 Nov 2026; research note added 19 Nov, see "A10 and A11: research so far" below):** Can a participating bank place Mapema-originated invoice-discounting / reverse-factoring advances under the National Treasury MSME Credit Guarantee Scheme (PFM (Credit Guarantee Scheme) Regulations 2020, LN 197 of 2020)? **Sharper questions:** (a) Is the scheme (or its successor, the Kenya Credit Guarantee Company) issuing new guarantees now, and under which rules and agreement? Business Daily reported a pause on new guarantees from early 2025. (b) Is a revolving invoice-discounting line an eligible "credit facility" for "working capital" (reg. 10(1)(f)(i)), and does the KES 5m cap apply per line or per invoice? (c) The 3-month lock-in in reg. 14(11)(c) runs from the *last disbursement*; on a revolving line each drawdown restarts it. Is a 30–60 day advance ever claimable? (d) Reg. 11(a) excludes risk already covered by another guarantee or insurer: does buyer confirmation, an irrevocable letter of undertaking (ILU) or trade credit insurance count, and does it exclude the facility or only reduce cover? (e) Who is the "borrower" in reverse factoring: the supplier (an MSME) or the buyer (often not an MSME, so excluded under reg. 11(f))? (f) Standard Chartered is not a participating bank; can it join, or would only KCB's book qualify? (g) Guarantee fee level and who pays it (not stated in the Regulations or on the Treasury page). | Assume **no** CGS cover in pilot pricing until counsel and the partner bank confirm in writing. Do not mention CGS in marketing. | treasury.go.ke/credit-guarantee-scheme; research below |
+
+### A10 and A11: research so far (19 Nov 2026, not legal advice)
+
+Desk research by the Compliance & Risk Analyst, for counsel to confirm. Kenya Law (kenyalaw.org) blocked automated
+download of LN 191 of 2026, so NDTCP regulation numbers below still come from law-firm commentary or the CBK's
+2025 draft, not the gazetted text. Confidence: **high** = primary text read; **medium** = consistent law-firm or
+official secondary sources; **low** = inference or single secondary source.
+
+**A10: NDTCP status under model A. Likely answer: no NDTCP licence or registration for Mapema, provided it never
+funds, owns or guarantees the advances (medium).**
+
+- The CBK Act s.2 (as amended by the Business Laws (Amendment) Act 2024, s.4) defines "non-deposit-taking credit
+  provider" as a person licensed to carry on non-deposit taking credit business **"using own funds and assets"**.
+  "Non-deposit taking credit business" covers loans or credit facilities to the public, asset finance, BNPL, credit
+  guarantees, PAYG, P2P and "any other activity" the CBK determines. There is **no express mention of factoring or
+  invoice discounting**, and **no express carve-out for technology or service providers** to banks. **High** (primary
+  text read). Source: [Business Laws (Amendment) Act 2024, s.4 and s.7 (new s.33R)](https://investmentpromotion.go.ke/sites/default/files/2026-07/Business-Laws-%28Amendment%29-Act%2C-2024.pdf).
+- The NDTCP Regulations 2026 (LN 191, gazetted 29 Sep 2026) apply to non-deposit taking credit business "not regulated
+  under any other written law" and exclude Banking Act institutions (reg. 3(3)(a) per commentary; reg. 2(2)(a) in the
+  2025 draft). So the **bank's** book is outside them. Existing unregulated operators must apply by **29 Mar 2027**.
+  **High** for the draft text, **medium** for the final numbering. Sources: [CBK 2025 draft, reg. 2](https://www.centralbank.go.ke/wp-content/uploads/2025/08/Draft-Central-Bank-of-Kenya-Non-Deposit-Taking-Credit-Providers-Regulations-2025.pdf);
+  [CDH, 28 Oct 2026](https://www.cliffedekkerhofmeyr.com/en/news/publications/2026/Kenya/Corporate-Commercial/corporate-and-commercial-alert-28-october-New-rules-for-non-deposit-taking-credit-providers);
+  [Bowmans, 7 Oct 2026](https://bowmanslaw.com/insights/kenya-non-deposit-taking-credit-provider-regulations-are-here-what-lenders-need-to-know/).
+- Law-firm view: classification follows **substance**: who advances credit, carries the risk, sets terms, owns the
+  receivables and collects. **Medium.** Source: [CM Advocates, 17 Oct 2026](https://www.cmadvocates.com/media/blog/pdf/Kenyas_Non-Deposit_Taking_Credit_Providers_Regulations_2026.pdf).
+  The CBK's general "any other entity approved by the Bank" exclusion was **dropped** from the final text, and the
+  remaining power to exclude persons is narrow (Bowmans, CDH above). So there is no exemption to apply for. Mapema must
+  simply stay outside the definition.
+- Risk points that could pull Mapema in (low/medium, inference): Mapema charging the supplier directly (the KES 2,500
+  verification fee), owning or buying any receivable, any first-loss or recourse to Mapema, or Mapema being the
+  contracting "credit provider" in the supplier agreement.
+- **Bank side: outsourcing, not agency.** CBK Prudential Guideline CBK/PG/16 (Outsourcing): para 4.1.1 needs prior
+  CBK approval for material outsourcing; para 4.1.4 lists "application processing (loan originations)", "claims
+  administration (loan processing, collateral management, collection of bad debts)", KYC and "provision of mobile
+  financial services channels/technology" as material. Para 4.1.2: the **decision to grant loans cannot be
+  outsourced**. **High** (primary text, 2013 guideline in CBK's consolidated prudential guidelines; counsel to confirm no
+  later revision). Source: [CBK Prudential Guidelines, CBK/PG/16, pp. 393–396](https://www.centralbank.go.ke/wp-content/uploads/2016/08/PRUDENTIAL-GUIDELINES.pdf).
+- CBK/PG/15 (Agent Banking) defines an agent as an entity contracted to provide the institution's services, with
+  permissible activities centred on cash in/out at outlets (para 3.2). Mapema handles no cash and runs no outlets, so
+  **agent status looks unlikely** (medium). Same source, pp. 347 onwards.
+- **National Payment System Act 2011, s.2**: "payment service provider" includes limb (iii), any person that
+  "processes or stores data on behalf of such payment service providers or users". Authorisation under s.12. Limb (iii)
+  is broad, so counsel should confirm that sending payout instructions to the bank, with funds only in a bank-named
+  account, is not PSP business. **High** for the text, **low** for the conclusion. Source: [NPS Act 2011 (CBK copy), s.2 and s.12](https://www.centralbank.go.ke/images/docs/legislation/NATIONAL%20PAYMENT%20SYSTEM%20ACT%20(No%2039%20of%202011)%20(2).pdf).
+- **Credit information**: no rule found that makes a bank's technology provider a credit reference bureau. CRB
+  reporting should stay with the bank. **Low**, not researched in depth.
+- **"CBK (Amendment) Act 2025"**: not found. The 2024 Business Laws (Amendment) Act is the operative amendment.
+- **12 Nov 2026 Parliament directive**: the National Assembly Delegated Legislation Committee directed CBK to suspend the
+  rollout and redraft provisions (open-ended discretion, penalties of up to KES 2m under reg. 86, drafting). Bowmans:
+  this is **not an annulment**. The Regulations remain in force, the 29 Mar 2027 deadline is unchanged, and the CBK Act
+  ban on unlicensed NDTCP business stands. **High.** Sources: [Kenya News Agency, 14 Nov 2026](https://www.kenyanews.go.ke/parliamentary-committee-halts-proposed-cbk-credit-regulations-over-legal-flaws/);
+  [Bowmans, 16 Nov 2026](https://bowmanslaw.com/insights/kenya-paused-rollout-of-the-non-deposit-taking-credit-provider-regulations-what-lenders-need-to-know-now/).
+
+**A11: CGS cover for invoice finance. Likely answer: possibly yes in principle through KCB, but not available to plan
+on today (medium-low).**
+
+- Eligible borrower (reg. 10): a registered, tax-compliant MSME with a county permit, borrowing for business purposes
+  "including working capital". The guarantee covers only "a portion" of the facility. Reg. 11 excludes risk already
+  covered by another guarantee or insurer (11(a)), non-MSMEs (11(f)) and financial intermediaries (11(e)). Invoice
+  finance is **neither named nor excluded**. **High** (primary text). Source: [PFM (Credit Guarantee Scheme) Regulations 2020, regs 10–16](https://www.treasury.go.ke/sites/default/files/PFM-Credit-Guarantee-Scheme-Regulations-2020.pdf).
+- Claims need the facility to be non-performing, recalled and in recovery, and a **3-month lock-in from the last
+  disbursement or guarantee-fee payment** (reg. 14(11)). The bank keeps full recourse (reg. 14(8)), and one MSME may not
+  use more than 1% of the bank's guarantee funds (reg. 14(2)). A guarantee fee exists (reg. 14(11)(c)) but **no rate is
+  published** (not found). **High.** Same source.
+- Treasury FAQ: maximum **KES 5m**. Two CGS facilities cannot run concurrently. Participating banks: **Absa, Credit Bank,
+  DTB, KCB, NCBA, Stanbic, Co-operative Bank**. **Standard Chartered is not listed.** **High** (official page; may be
+  stale). Source: [Treasury CGS page, FAQs 6, 8, 13](https://www.treasury.go.ke/credit-guarantee-scheme).
+- Cover and tenor: 50% of outstanding principal, capped at 25% of principal; up to 3 years with up to 5 months' grace.
+  **Medium-high** (Treasury report tabled in Parliament). Source: [Annual performance report, MSME CGS (Parliament, Mar 2025)](https://www.parliament.go.ke/sites/default/files/2025-03/Annual%20Perfomance%20for%20the%20MSMEs%20Credit%20Guarantee%20Scheme.pdf).
+- Evidence that invoice discounting has been guaranteed in practice: a KBA working paper using a tier-1 bank's
+  guarantee-scheme book (2,398 MSMEs, 2022 to Feb 2025) lists "invoice discounting" as a facility type (about 10% of
+  loans). It does not say for certain that this is the Treasury CGS. **Medium.** Source: [KBA WPS 03/26, Muli et al., s.3.4 and Table 4.1](https://www.kba.co.ke/wp-content/uploads/2026/05/WPS0326-Muli-et-al.pdf).
+  KCB offers invoice discounting of up to 6 months: [KCB product page](https://ke.kcbgroup.com/products/sme-solutions-invoice-discounting).
+- **Status risk:** Treasury paused new guarantees in early 2025 pending a new Kenya Credit Guarantee Scheme Company.
+  Banks are to own 75%, with plans to widen the scheme to all banks and raise capital from KES 3bn to 10bn. A Sep 2026
+  report says the company has been established with a USD 30m facility. **No evidence found that new guarantees
+  have resumed** or of new rules. **Medium.** Sources: [Business Daily, 16 Jan 2025](https://www.businessdailyafrica.com/bd/economy/treasury-freezes-uhuru-era-sh10bn-loan-scheme-for-smes-4891090);
+  [Business Daily, 21 Sep 2025](https://www.businessdailyafrica.com/bd/economy/banks-to-own-75-percent-of-credit-guarantee-firm-5201334);
+  [Business Daily, 21 Dec 2025](https://www.businessdailyafrica.com/bd/economy/smes-set-for-sh50bn-funding-in-expanded-state-backed-scheme-5304704) (CBK draft rules for private credit guarantee companies);
+  [Sacco Review, 24 Sep 2026](https://saccoreview.co.ke/msme-financing-kenya-seeks-private-capital-for-small-firms/).
+- **Hustler Fund** is a direct digital lending programme, not a bank guarantee scheme (Business Daily, 21 Dec 2025,
+  above). **Stawi** was a 2019 CBK-backed bank MSME loan product, not a guarantee scheme, and has stopped lending.
+  Sources: [CBK press release](https://www.centralbank.go.ke/uploads/press_releases/825716068_Press%20Release%20-%20A%20Revolution%20in%20the%20Financing%20of%20MSMEs.pdf);
+  [Citizen Digital](https://citizen.digital/article/gachora-why-stawi-died-a-natural-death-n295211). Neither covers invoice finance (medium).
+- No 2023 or 2024 amendment to the CGS Regulations was found (not found ≠ does not exist; counsel to check).
 
 ## B. Credit risk, NPLs and collections
 
